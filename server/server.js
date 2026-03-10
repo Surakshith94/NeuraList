@@ -16,6 +16,10 @@ mongoose.connect(process.env.MONGO_URI)
   .catch((err) => console.log('❌ MongoDB connection error:', err));
 // ---------------------------
 
+// connect the routes
+const taskRoutes = require('./routes/taskRoutes');
+app.use('/api/tasks', taskRoutes); // All routes in taskRoutes will be prefixed with /api/tasks 
+
 // A simple test route
 app.get('/', (req, res) => {
   res.send('Smart To-Do Engine is running!');
