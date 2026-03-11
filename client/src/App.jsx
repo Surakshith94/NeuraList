@@ -90,6 +90,23 @@ function App() {
     setScheduledTasks(finalSchedule);
   };
 
+  // --- NEW: Mark as Complete Logic ---
+  const handleComplete = async (taskId) => {
+    try {
+      // 1. Tell the backend to delete it
+      await axios.delete(`http://localhost:5000/api/tasks/${taskId}`);
+      
+      // 2. Remove it from the main tasks list in React State
+      setTasks(tasks.filter(task => task._id !== taskId));
+      
+      // 3. Remove it from the generated schedule (if it's currently showing)
+      setScheduledTasks(scheduledTasks.filter(task => task._id !== taskId));
+      
+    } catch (error) {
+      console.error("Error completing task:", error);
+    }
+  };
+
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif' }}>
       <h1>Smart To-Do Engine</h1>
@@ -153,14 +170,22 @@ function App() {
       ) : (
         <ul style={{ listStyleType: 'none', padding: 0 }}>
           {scheduledTasks.map((task) => (
-            <li key={task._id} style={{ background: '#f4f4f4', margin: '10px 0', padding: '15px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', borderLeft: task.priority === 'High' ? '5px solid #dc3545' : '5px solid transparent' }}>
+            <li key={task._id} style={{ background: '#f4f4f4', margin: '10px 0', padding: '15px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: task.priority === 'High' ? '5px solid #dc3545' : '5px solid transparent' }}>
               <div>
                 <strong>{task.title}</strong>
                 <p style={{ margin: '5px 0 0', fontSize: '14px', color: '#555' }}>
                   {task.estimatedMinutes} mins | {task.energyLevel}
                 </p>
               </div>
-              <span style={{ fontWeight: 'bold', color: '#666' }}>{task.priority}</span>
+              <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                <span style={{ fontWeight: 'bold', color: '#666' }}>{task.priority}</span>
+                {/* NEW: The Complete Button */}
+                <button 
+                  onClick={() => handleComplete(task._id)}
+                  style={{ background: '#28a745', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 12px', cursor: 'pointer', fontWeight: 'bold' }}>
+                  ✅ Done
+                </button>
+              </div>
             </li>
           ))}
         </ul>
