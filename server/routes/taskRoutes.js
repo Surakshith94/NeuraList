@@ -15,6 +15,41 @@ router.post('/', async (req, res) => {
   }
 });
 
+// PUT: Update Task Status (Start, Pause, or Complete)
+router.put('/:id/status', async (req, res) => {
+  try {
+    const { action } = req.body; // 'start', 'pause', or 'complete'
+    const task = await Task.findById(req.params.id);
+
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+
+    const now = new Date();
+
+    if (action === 'start') {
+      task.status = 'Active';
+      task.lastStartedAt = now;
+    } 
+    
+    else if (action === 'pause' || action === 'complete') {
+      // Calculate how long it was active
+      if (task.lastStartedAt) {
+        const diffMs = now - task.lastStartedAt;
+        const diffMins = Math.floor(diffMs / 60000);
+        task.timeSpent += diffMins;
+      }
+      
+      task.status = action === 'pause' ? 'Paused' : 'Completed';
+      task.lastStartedAt = null; // Reset the clock
+    }
+
+    const updatedTask = await task.save();
+    res.status(200).json(updatedTask);
+    
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET: Fetch all tasks
 router.get('/', async (req, res) => {
   try {

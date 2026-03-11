@@ -8,7 +8,7 @@ const TaskSchema = new mongoose.Schema({
   },
   estimatedMinutes: {
     type: Number,
-    required: true, // e.g., 45 minutes
+    required: true, 
   },
   priority: {
     type: String,
@@ -17,16 +17,26 @@ const TaskSchema = new mongoose.Schema({
   },
   energyLevel: {
     type: String,
-    enum: ['High Focus', 'Neutral', 'Recharge'], // High Focus = Studying, Recharge = Gaming
+    enum: ['High Focus', 'Neutral', 'Recharge'], 
     required: true,
   },
-  isFlexible: {
-    type: Boolean,
-    default: true, // Can it be moved? True for studying, False for a scheduled class
+  
+  // --- NEW: STATE TRACKING FIELDS ---
+  
+  status: {
+    type: String,
+    enum: ['Pending', 'Active', 'Paused', 'Completed'],
+    default: 'Pending',
   },
-  isCompleted: {
-    type: Boolean,
-    default: false,
+  timeSpent: {
+    type: Number,
+    default: 0, // How many minutes you've already put into this task
+  },
+  lastStartedAt: {
+    type: Date,
+    default: null, // The exact moment you click "Start" or "Resume"
   }
-}, { timestamps: true }); 
+  
+}, { timestamps: true });
+
 module.exports = mongoose.model('Task', TaskSchema);
