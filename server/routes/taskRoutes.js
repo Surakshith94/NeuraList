@@ -25,4 +25,15 @@ router.get('/', async (req, res) => {
   }
 });
 
+// DELETE: Mark a task as complete and remove it
+router.delete('/:id', async (req, res) => {
+  try {
+    // req.params.id grabs the unique ID from the URL
+    await Task.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: 'Task completed and removed!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
