@@ -1,115 +1,44 @@
 import React from 'react';
 
 const ActiveTaskCard = ({ task, onComplete, onPause }) => {
-  if (!task) return null; // Don't show anything if no task is active
-
-  // Taking inspiration from the sleek dark mode image
-  const styles = {
-    card: {
-      background: 'linear-gradient(145deg, #1A1A24 0%, #121218 100%)', // Soft dark gradient
-      borderRadius: '28px', // Heavy rounded corners like the image
-      padding: '24px',
-      color: '#FFFFFF',
-      boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)', // Deep shadow for floating effect
-      border: '1px solid rgba(255, 255, 255, 0.05)', // Subtle glass edge
-      marginBottom: '24px',
-      position: 'relative',
-      overflow: 'hidden'
-    },
-    glowLine: {
-      position: 'absolute',
-      top: 0,
-      left: '10%',
-      width: '80%',
-      height: '2px',
-      background: 'linear-gradient(90deg, transparent, #4CAF50, transparent)', // Neon accent
-      opacity: 0.8
-    },
-    header: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: '16px'
-    },
-    tag: {
-      background: 'rgba(255, 255, 255, 0.1)',
-      padding: '6px 12px',
-      borderRadius: '12px',
-      fontSize: '12px',
-      fontWeight: '600',
-      color: '#A0A0B0',
-      backdropFilter: 'blur(10px)'
-    },
-    title: {
-      fontSize: '24px',
-      fontWeight: '700',
-      margin: '0 0 8px 0',
-      lineHeight: '1.2'
-    },
-    timeText: {
-      color: '#8E8E93',
-      fontSize: '14px',
-      margin: '0 0 24px 0',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px'
-    },
-    buttonRow: {
-      display: 'flex',
-      gap: '12px'
-    },
-    btnDone: {
-      background: '#E8F5E9', // Soft high-contrast button
-      color: '#2E7D32',
-      padding: '14px 24px',
-      borderRadius: '16px',
-      border: 'none',
-      fontWeight: 'bold',
-      fontSize: '16px',
-      cursor: 'pointer',
-      flex: 2,
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: '8px',
-      transition: 'transform 0.1s ease'
-    },
-    btnPause: {
-      background: 'rgba(255, 255, 255, 0.08)', // Glassy secondary button
-      color: '#FFFFFF',
-      padding: '14px 24px',
-      borderRadius: '16px',
-      border: 'none',
-      fontWeight: 'bold',
-      fontSize: '16px',
-      cursor: 'pointer',
-      flex: 1,
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center'
-    }
-  };
+  if (!task) return null;
 
   return (
-    <div style={styles.card}>
-      <div style={styles.glowLine}></div>
+    // The main card container: Dark gradient, rounded corners, subtle border, shadow
+    <div className="relative overflow-hidden bg-gradient-to-br from-gray-900 to-black rounded-[28px] p-6 shadow-2xl border border-white/5 mb-6">
       
-      <div style={styles.header}>
-        <span style={styles.tag}>Now Playing</span>
-        <span style={styles.tag}>{task.energyLevel}</span>
+      {/* The glowing accent line at the top */}
+      <div className="absolute top-0 left-[10%] w-[80%] h-[2px] bg-gradient-to-r from-transparent via-green-500 to-transparent opacity-80"></div>
+      
+      {/* Header with Tags */}
+      <div className="flex justify-between items-center mb-4">
+        <span className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-400">
+          Now Playing
+        </span>
+        <span className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-400">
+          {task.energyLevel}
+        </span>
       </div>
 
-      <h2 style={styles.title}>{task.title}</h2>
-      
-      <p style={styles.timeText}>
-        ⏳ {task.timeSpent} mins spent / {task.estimatedMinutes} mins total
+      {/* Task Title & Time */}
+      <h2 className="text-2xl font-bold mb-2 leading-tight text-white">{task.title}</h2>
+      <p className="text-sm text-gray-400 mb-6 flex items-center gap-2">
+        <span>⏳</span> {task.timeSpent} mins spent / {task.estimatedMinutes} mins total
       </p>
 
-      <div style={styles.buttonRow}>
-        <button style={styles.btnDone} onClick={() => onComplete(task._id)}>
-          <span style={{ fontSize: '20px' }}>✅</span> Done
+      {/* Action Buttons */}
+      <div className="flex gap-3">
+        <button 
+          onClick={() => onComplete(task._id)}
+          className="flex-2 flex items-center justify-center gap-2 bg-green-500/10 text-green-400 hover:bg-green-500/20 py-3 px-6 rounded-2xl font-bold text-lg transition-all duration-200 cursor-pointer w-full border border-green-500/20"
+        >
+          <span className="text-xl">✅</span> Done
         </button>
-        <button style={styles.btnPause} onClick={() => onPause(task._id)}>
+        
+        <button 
+          onClick={() => onPause(task._id)}
+          className="flex-1 flex items-center justify-center bg-white/5 text-white hover:bg-white/10 py-3 px-6 rounded-2xl font-bold text-lg transition-all duration-200 cursor-pointer w-full border border-white/10"
+        >
           ⏸️ Pause
         </button>
       </div>
