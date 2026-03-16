@@ -74,12 +74,34 @@ function App() {
     }
   };
 
-  const handleComplete = (taskId) => {
+  const handleComplete = async (taskId) => {
+    // 1. Check for overtime first
     const overtime = activeTask.timeSpent - activeTask.estimatedMinutes;
+    
+    // If we went over time, trigger the Modal and STOP the completion process for now
     if (overtime > 0) {
       setIsOvertimeModalOpen(true);
-    } else {
-      alert('Task finished on time!');
+      return; 
+    }
+
+    // 2. If finished on time, proceed to delete and shift
+    try {
+      // Tell MongoDB to permanently delete this task
+      await axios.delete(`http://localhost:5000/api/tasks/${taskId}`);
+
+      // Instantly update the React UI
+      if (queueTasks.length > 0) {
+        // Move the top queue item into the active slot
+        setActiveTask(queueTasks[0]);
+        // Remove that item from the queue list
+        setQueueTasks(queueTasks.slice(1));
+      } else {
+        // If the queue is empty, you're done for the night!
+        setActiveTask(null);
+      }
+      
+    } catch (error) {
+      console.error("Error completing task:", error);
     }
   };
 
