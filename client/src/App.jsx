@@ -44,21 +44,41 @@ function App() {
     setIsMoodModalOpen(false);
     setHasEveningStarted(true);
 
-    let filteredTasks = [...allTasks];
+    let processedTasks = [...allTasks];
 
-    // If Burned Out, ONLY show tasks tagged as "Recharge" (like gaming/movies)
     if (mood === 'Burned Out') {
-      filteredTasks = filteredTasks.filter(task => task.energyLevel === 'Recharge');
-    } 
-    // If Normal, hide "High Focus" but keep Neutral and Recharge
-    else if (mood === 'Neutral') {
-      filteredTasks = filteredTasks.filter(task => task.energyLevel !== 'High Focus');
-    }
-    // If Energized, keep everything (no filter needed)
+      // 1. Keep Recharge tasks AND High Priority tasks (ignore the rest)
+      processedTasks = processedTasks.filter(
+        task => task.energyLevel === 'Recharge' || task.priority === 'High'
+      );
 
-    if (filteredTasks.length > 0) {
-      setActiveTask(filteredTasks[0]);
-      setQueueTasks(filteredTasks.slice(1));
+      // 2. The Override: Shrink the High Priority tasks into manageable sprints
+      processedTasks = processedTasks.map(task => {
+        if (task.priority === 'High' && task.energyLevel !== 'Recharge') {
+          return { 
+            ...task, 
+            // Cap the time at 25 minutes, even if it was originally 120
+            estimatedMinutes: Math.min(task.estimatedMinutes, 25), 
+            // Add a visual tag so you know the algorithm altered it
+            title: `🚨 Sprint: ${task.title}` 
+          };
+        }
+        return task;
+      });
+
+    } else if (mood === 'Neutral') {
+      // Hide High Focus tasks if you are just feeling normal/meh
+      processedTasks = processedTasks.filter(task => task.energyLevel !== 'High Focus');
+    }
+
+    // 3. Always sort by Priority (High -> Medium -> Low) so sprints are first
+    const priorityValues = { 'High': 3, 'Medium': 2, 'Low': 1 };
+    processedTasks.sort((a, b) => priorityValues[b.priority] - priorityValues[a.priority]);
+
+    // 4. Update the UI State
+    if (processedTasks.length > 0) {
+      setActiveTask(processedTasks[0]);
+      setQueueTasks(processedTasks.slice(1));
     } else {
       setActiveTask(null);
       setQueueTasks([]);
