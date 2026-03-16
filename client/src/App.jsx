@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import ActiveTaskCard from './ActiveTaskCard';
+import ActiveTaskCard from './components/ActiveTaskCard';
 
 function App() {
   const [tasks, setTasks] = useState([]);
