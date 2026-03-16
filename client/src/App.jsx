@@ -6,7 +6,7 @@ import TaskQueue from './components/TaskQueue';
 import AddTaskModal from './components/AddTaskModal'; 
 import MoodSelectorModal from './components/MoodSelectorModal'; 
 // --- NEW: Importing our custom algorithm engine ---
-import { applyEnergyWave, applyTimeBonus } from './utils/algorithm';
+import { applyEnergyWave, applyTimeBonus } from './utils/algortihm';
 
 function App() {
   const [allTasks, setAllTasks] = useState([]); 
