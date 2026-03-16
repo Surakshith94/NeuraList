@@ -4,26 +4,22 @@ import ActiveTaskCard from './components/ActiveTaskCard';
 import OvertimeModal from './components/OvertimeModal';
 import TaskQueue from './components/TaskQueue'; 
 import AddTaskModal from './components/AddTaskModal'; 
-import MoodSelectorModal from './components/MoodSelectorModal'; // <-- NEW IMPORT
+import MoodSelectorModal from './components/MoodSelectorModal'; 
+// --- NEW: Importing our custom algorithm engine ---
+import { applyEnergyWave, applyTimeBonus } from './utils/algorithm';
 
 function App() {
-  // Store EVERYTHING from the database here
   const [allTasks, setAllTasks] = useState([]); 
-  
-  // What the user actually sees based on the algorithm
   const [activeTask, setActiveTask] = useState(null);
   const [queueTasks, setQueueTasks] = useState([]);
-  
   const [isLoading, setIsLoading] = useState(true);
   
-  // UI States
   const [hasEveningStarted, setHasEveningStarted] = useState(false);
   const [currentMood, setCurrentMood] = useState(null);
   const [isMoodModalOpen, setIsMoodModalOpen] = useState(false);
   const [isOvertimeModalOpen, setIsOvertimeModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  // Fetch from database on load
   useEffect(() => {
     const fetchDatabaseTasks = async () => {
       try {
@@ -38,7 +34,7 @@ function App() {
     fetchDatabaseTasks();
   }, []);
 
-  // --- NEW: THE SMART FILTERING ALGORITHM ---
+  // --- UPGRADED: The Smart Filtering & Slicing Engine ---
   const applyMoodAndStart = (mood) => {
     setCurrentMood(mood);
     setIsMoodModalOpen(false);
@@ -47,35 +43,34 @@ function App() {
     let processedTasks = [...allTasks];
 
     if (mood === 'Burned Out') {
-      // 1. Keep Recharge tasks AND High Priority tasks (ignore the rest)
+      // Keep only Recharge AND High Priority tasks
       processedTasks = processedTasks.filter(
         task => task.energyLevel === 'Recharge' || task.priority === 'High'
       );
-
-      // 2. The Override: Shrink the High Priority tasks into manageable sprints
+      // Shrink High Priority tasks to 25-min sprints
       processedTasks = processedTasks.map(task => {
         if (task.priority === 'High' && task.energyLevel !== 'Recharge') {
           return { 
             ...task, 
-            // Cap the time at 25 minutes, even if it was originally 120
             estimatedMinutes: Math.min(task.estimatedMinutes, 25), 
-            // Add a visual tag so you know the algorithm altered it
             title: `🚨 Sprint: ${task.title}` 
           };
         }
         return task;
       });
-
-    } else if (mood === 'Neutral') {
-      // Hide High Focus tasks if you are just feeling normal/meh
-      processedTasks = processedTasks.filter(task => task.energyLevel !== 'High Focus');
+    } else {
+      // If Neutral, remove High Focus
+      if (mood === 'Neutral') {
+        processedTasks = processedTasks.filter(task => task.energyLevel !== 'High Focus');
+      }
+      // Apply the Energy Wave to slice up massive blocks of work
+      processedTasks = applyEnergyWave(processedTasks);
     }
 
-    // 3. Always sort by Priority (High -> Medium -> Low) so sprints are first
+    // Sort by Priority
     const priorityValues = { 'High': 3, 'Medium': 2, 'Low': 1 };
     processedTasks.sort((a, b) => priorityValues[b.priority] - priorityValues[a.priority]);
 
-    // 4. Update the UI State
     if (processedTasks.length > 0) {
       setActiveTask(processedTasks[0]);
       setQueueTasks(processedTasks.slice(1));
@@ -87,37 +82,51 @@ function App() {
 
   const handleTaskAdded = (newTask) => {
     setAllTasks([...allTasks, newTask]);
-    // If the evening is already running, we should just push it to the queue
     if (hasEveningStarted) {
-      if (!activeTask) setActiveTask(newTask);
-      else setQueueTasks([...queueTasks, newTask]);
+      // Run the new task through the energy wave just in case it's huge
+      const wavedNewTasks = applyEnergyWave([newTask]);
+      if (!activeTask) {
+        setActiveTask(wavedNewTasks[0]);
+        setQueueTasks(wavedNewTasks.slice(1));
+      } else {
+        setQueueTasks([...queueTasks, ...wavedNewTasks]);
+      }
     }
   };
 
+  // --- UPGRADED: Handle Overtime AND Time Bonuses ---
   const handleComplete = async (taskId) => {
-    // 1. Check for overtime first
-    const overtime = activeTask.timeSpent - activeTask.estimatedMinutes;
+    // We assume timeSpent comes from your backend tracking, or a timer component.
+    // For this example logic, we are checking the delta.
+    const timeSpent = activeTask.timeSpent || activeTask.estimatedMinutes; // Fallback if no timer is actively running
+    const overtime = timeSpent - activeTask.estimatedMinutes;
+    const undertime = activeTask.estimatedMinutes - timeSpent;
     
-    // If we went over time, trigger the Modal and STOP the completion process for now
+    // 1. If Overtime, trigger the modal and wait for user input
     if (overtime > 0) {
       setIsOvertimeModalOpen(true);
       return; 
     }
 
-    // 2. If finished on time, proceed to delete and shift
-    try {
-      // Tell MongoDB to permanently delete this task
-      await axios.delete(`http://localhost:5000/api/tasks/${taskId}`);
+    // 2. If Undertime (Option A), reward the user by extending the next break!
+    let updatedQueue = [...queueTasks];
+    if (undertime > 0) {
+      updatedQueue = applyTimeBonus(updatedQueue, undertime);
+    }
 
-      // Instantly update the React UI
-      if (queueTasks.length > 0) {
-        // Move the top queue item into the active slot
-        setActiveTask(queueTasks[0]);
-        // Remove that item from the queue list
-        setQueueTasks(queueTasks.slice(1));
+    // 3. Complete the task in MongoDB and shift the queue
+    try {
+      // Don't try to delete system-generated breaks from the database
+      if (!activeTask.isSystemGenerated) {
+        await axios.delete(`http://localhost:5000/api/tasks/${taskId}`);
+      }
+
+      if (updatedQueue.length > 0) {
+        setActiveTask(updatedQueue[0]);
+        setQueueTasks(updatedQueue.slice(1));
       } else {
-        // If the queue is empty, you're done for the night!
         setActiveTask(null);
+        setQueueTasks([]);
       }
       
     } catch (error) {
@@ -126,7 +135,7 @@ function App() {
   };
 
   const handlePause = (taskId) => {
-    alert('Task paused.');
+    alert('Task paused. Go grab a break!');
   };
 
   if (isLoading) {
@@ -153,7 +162,6 @@ function App() {
           </button>
         </header>
 
-        {/* --- NEW: The Start State vs Active State --- */}
         {!hasEveningStarted ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white/5 border border-white/10 rounded-[32px] mb-8">
             <h2 className="text-2xl font-bold mb-2">Ready to begin?</h2>
@@ -167,7 +175,6 @@ function App() {
           </div>
         ) : (
           <>
-            {/* Show active mood tag */}
             <div className="mb-6 flex items-center gap-2">
               <span className="text-sm text-gray-400">Current State:</span>
               <span className="bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-blue-400 border border-blue-500/30">
@@ -176,10 +183,10 @@ function App() {
             </div>
 
             {activeTask ? (
-              <ActiveTaskCard task={activeTask} onComplete={handleComplete} onPause={handlePause} />
+              <ActiveTaskCard task={activeTask} onComplete={() => handleComplete(activeTask._id)} onPause={handlePause} />
             ) : (
               <div className="p-8 text-center border border-dashed border-white/20 rounded-2xl bg-white/5 mb-6">
-                <p className="text-gray-400">No active tasks match your current mood.</p>
+                <p className="text-gray-400">No active tasks match your current mood. You are free!</p>
               </div>
             )}
 
@@ -187,23 +194,16 @@ function App() {
           </>
         )}
 
-        {/* All our Modals */}
-        <MoodSelectorModal 
-          isOpen={isMoodModalOpen} 
-          onSelectMood={applyMoodAndStart} 
-        />
-
-        <AddTaskModal 
-          isOpen={isAddModalOpen} 
-          onClose={() => setIsAddModalOpen(false)} 
-          onTaskAdded={handleTaskAdded} 
-        />
-
+        <MoodSelectorModal isOpen={isMoodModalOpen} onSelectMood={applyMoodAndStart} />
+        <AddTaskModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onTaskAdded={handleTaskAdded} />
         <OvertimeModal 
           isOpen={isOvertimeModalOpen}
           taskTitle={activeTask?.title}
           overtimeMinutes={activeTask ? activeTask.timeSpent - activeTask.estimatedMinutes : 0}
-          onDropTask={() => setIsOvertimeModalOpen(false)}
+          onDropTask={() => {
+             // Logic to drop a queue item goes here
+             setIsOvertimeModalOpen(false);
+          }}
           onPushBedtime={() => setIsOvertimeModalOpen(false)}
         />
 
