@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios, { all } from 'axios';
 import ActiveTaskCard from './components/ActiveTaskCard';
 import OvertimeModal from './components/OvertimeModal';
 import TaskQueue from './components/TaskQueue'; 
@@ -10,6 +10,7 @@ import SleepCountdown from './components/SleepCountdown'; // Fixed capitalizatio
 import { applyEnergyWave, applyTimeBonus } from './utils/algorithm';
 import MasterTaskList from './components/MasterTaskList'; // Optional: For debugging or future features
 import ProjectSummary from './components/ProjectSummary'; // NEW: Importing the ProjectSummary component
+import ConsistencyHeatmap from './components/ConsistencyHeatmap'; // NEW: The consistency heatmap component
 
 function App() {
   const [allTasks, setAllTasks] = useState([]); 
@@ -42,7 +43,7 @@ function App() {
     setIsMoodModalOpen(false);
     setHasEveningStarted(true);
 
-    let processedTasks = [...allTasks];
+    let processedTasks = allTasks.filter(task => task.status === 'completed' && task.completedAt); // Only consider completed tasks for the queue
 
     if (mood === 'Burned Out') {
       processedTasks = processedTasks.filter(
@@ -110,7 +111,11 @@ function App() {
 
     try {
       if (!activeTask.isSystemGenerated) {
-        await axios.delete(`http://localhost:5000/api/tasks/${taskId}`);
+        await axios.put(`http://localhost:5000/api/tasks/${taskId}`, {
+          status: 'completed',
+          completedAt: new Date()
+        });
+        setAllTasks(allTasks.map(t => t._id === taskId ? { ...t, status: 'completed', completedAt: new Date() } : t));
       }
 
       if (updatedQueue.length > 0) {
@@ -167,11 +172,12 @@ function App() {
             >
               Start My Evening
             </button>
+            <ConsistencyHeatmap tasks={allTasks} />
             
             {/* NEW: The Time Allocation Summary */}
             <ProjectSummary tasks={allTasks} />
 
-            <MasterTaskList tasks={allTasks} onDelete={handleDeleteTask} />
+            <MasterTaskList tasks={allTasks.filter(task => task.status === 'completed' && task.completedAt)} onDelete={handleDeleteTask} />
           </div>
         ) : (
           <>

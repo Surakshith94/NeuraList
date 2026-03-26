@@ -5,8 +5,10 @@ const TaskSchema = new mongoose.Schema({
   estimatedMinutes: { type: Number, required: true },
   priority: { type: String, default: 'Medium' },
   energyLevel: { type: String, default: 'Neutral' },
-  // --- NEW: Tell MongoDB to accept Project Tags ---
-  project: { type: String, default: 'General' } 
+  project: { type: String, default: 'General' },
+  // --- NEW: For the Heatmap ---
+  status: { type: String, default: 'active' }, 
+  completedAt: { type: Date, default: null }
 });
 
 module.exports = mongoose.model('Task', TaskSchema);
