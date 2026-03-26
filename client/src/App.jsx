@@ -5,8 +5,9 @@ import OvertimeModal from './components/OvertimeModal';
 import TaskQueue from './components/TaskQueue'; 
 import AddTaskModal from './components/AddTaskModal'; 
 import MoodSelectorModal from './components/MoodSelectorModal'; 
-// --- NEW: Importing our custom algorithm engine ---
-import { applyEnergyWave, applyTimeBonus } from './utils/algortihm';
+import SleepCountdown from './components/SleepCountdown'; // Fixed capitalization
+// --- FIXED: Corrected spelling of 'algorithm' ---
+import { applyEnergyWave, applyTimeBonus } from './utils/algorithm';
 
 function App() {
   const [allTasks, setAllTasks] = useState([]); 
@@ -34,7 +35,6 @@ function App() {
     fetchDatabaseTasks();
   }, []);
 
-  // --- UPGRADED: The Smart Filtering & Slicing Engine ---
   const applyMoodAndStart = (mood) => {
     setCurrentMood(mood);
     setIsMoodModalOpen(false);
@@ -43,11 +43,9 @@ function App() {
     let processedTasks = [...allTasks];
 
     if (mood === 'Burned Out') {
-      // Keep only Recharge AND High Priority tasks
       processedTasks = processedTasks.filter(
         task => task.energyLevel === 'Recharge' || task.priority === 'High'
       );
-      // Shrink High Priority tasks to 25-min sprints
       processedTasks = processedTasks.map(task => {
         if (task.priority === 'High' && task.energyLevel !== 'Recharge') {
           return { 
@@ -59,15 +57,12 @@ function App() {
         return task;
       });
     } else {
-      // If Neutral, remove High Focus
       if (mood === 'Neutral') {
         processedTasks = processedTasks.filter(task => task.energyLevel !== 'High Focus');
       }
-      // Apply the Energy Wave to slice up massive blocks of work
       processedTasks = applyEnergyWave(processedTasks);
     }
 
-    // Sort by Priority
     const priorityValues = { 'High': 3, 'Medium': 2, 'Low': 1 };
     processedTasks.sort((a, b) => priorityValues[b.priority] - priorityValues[a.priority]);
 
@@ -83,7 +78,6 @@ function App() {
   const handleTaskAdded = (newTask) => {
     setAllTasks([...allTasks, newTask]);
     if (hasEveningStarted) {
-      // Run the new task through the energy wave just in case it's huge
       const wavedNewTasks = applyEnergyWave([newTask]);
       if (!activeTask) {
         setActiveTask(wavedNewTasks[0]);
@@ -94,29 +88,25 @@ function App() {
     }
   };
 
-  // --- UPGRADED: Handle Overtime AND Time Bonuses ---
-  const handleComplete = async (taskId) => {
-    // We assume timeSpent comes from your backend tracking, or a timer component.
-    // For this example logic, we are checking the delta.
-    const timeSpent = activeTask.timeSpent || activeTask.estimatedMinutes; // Fallback if no timer is actively running
+  const handleComplete = async (taskId, actualMinutesSpent) => {
+    // Failsafe in case actualMinutesSpent doesn't come through
+    const timeSpent = actualMinutesSpent || activeTask.estimatedMinutes;
+    
     const overtime = timeSpent - activeTask.estimatedMinutes;
     const undertime = activeTask.estimatedMinutes - timeSpent;
-    
-    // 1. If Overtime, trigger the modal and wait for user input
+
     if (overtime > 0) {
+      setActiveTask({ ...activeTask, timeSpent: timeSpent }); 
       setIsOvertimeModalOpen(true);
       return; 
     }
 
-    // 2. If Undertime (Option A), reward the user by extending the next break!
     let updatedQueue = [...queueTasks];
     if (undertime > 0) {
       updatedQueue = applyTimeBonus(updatedQueue, undertime);
     }
 
-    // 3. Complete the task in MongoDB and shift the queue
     try {
-      // Don't try to delete system-generated breaks from the database
       if (!activeTask.isSystemGenerated) {
         await axios.delete(`http://localhost:5000/api/tasks/${taskId}`);
       }
@@ -134,32 +124,26 @@ function App() {
     }
   };
 
-  const handlePause = (taskId) => {
-    alert('Task paused. Go grab a break!');
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#0d0d12] text-white flex items-center justify-center font-sans">
-        <p className="text-xl text-gray-400 animate-pulse">Syncing with database...</p>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[#0d0d12] text-white p-6 md:p-12 font-sans selection:bg-green-500/30">
       <div className="max-w-md mx-auto">
         
-        <header className="mb-10 flex justify-between items-center">
+        <header className="mb-10 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
           <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-500 tracking-tight">
             Good Evening.
           </h1>
-          <button 
-            onClick={() => setIsAddModalOpen(true)}
-            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl font-bold transition-colors cursor-pointer border border-white/10"
-          >
-            +
-          </button>
+          
+          <div className="flex items-center gap-4">
+            <SleepCountdown targetBedtime="23:00" />
+            
+            <button 
+              onClick={() => setIsAddModalOpen(true)}
+              className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl font-bold transition-colors cursor-pointer border border-white/10"
+              title="Add New Task"
+            >
+              +
+            </button>
+          </div>
         </header>
 
         {!hasEveningStarted ? (
@@ -183,7 +167,7 @@ function App() {
             </div>
 
             {activeTask ? (
-              <ActiveTaskCard task={activeTask} onComplete={() => handleComplete(activeTask._id)} onPause={handlePause} />
+              <ActiveTaskCard task={activeTask} onComplete={handleComplete} />
             ) : (
               <div className="p-8 text-center border border-dashed border-white/20 rounded-2xl bg-white/5 mb-6">
                 <p className="text-gray-400">No active tasks match your current mood. You are free!</p>
@@ -200,10 +184,7 @@ function App() {
           isOpen={isOvertimeModalOpen}
           taskTitle={activeTask?.title}
           overtimeMinutes={activeTask ? activeTask.timeSpent - activeTask.estimatedMinutes : 0}
-          onDropTask={() => {
-             // Logic to drop a queue item goes here
-             setIsOvertimeModalOpen(false);
-          }}
+          onDropTask={() => setIsOvertimeModalOpen(false)}
           onPushBedtime={() => setIsOvertimeModalOpen(false)}
         />
 
