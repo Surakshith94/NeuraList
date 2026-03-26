@@ -1,54 +1,45 @@
 import React from 'react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import SortableTaskItem from './SortableTaskItem';
 
-const TaskQueue = ({ tasks }) => {
-  if (!tasks || tasks.length === 0) {
-    return (
-      <div className="mt-8 text-center p-8 border border-dashed border-white/20 rounded-2xl bg-white/5">
-        <p className="text-gray-400">Your queue is empty. Time to relax!</p>
-      </div>
-    );
-  }
+const TaskQueue = ({ tasks, onReorder }) => {
+  // Configure sensors to know when the user is dragging (mouse or touch)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), // Requires moving 5px before drag starts to prevent accidental clicks
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+
+    // If you dropped it in a new spot, tell App.jsx to update the array
+    if (active.id !== over.id) {
+      const oldIndex = tasks.findIndex((task) => task._id === active.id);
+      const newIndex = tasks.findIndex((task) => task._id === over.id);
+      
+      const newOrder = arrayMove(tasks, oldIndex, newIndex);
+      onReorder(newOrder); // Pass the new array back to App.jsx!
+    }
+  };
+
+  if (!tasks || tasks.length === 0) return null;
 
   return (
     <div className="mt-8">
-      <h3 className="text-xl font-bold mb-4 text-white flex items-center gap-2">
-        <span>📋</span> Up Next
+      <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-4 ml-2">
+        ⏭️ Up Next
       </h3>
       
-      <div className="flex flex-col gap-3">
-        {tasks.map((task, index) => (
-          <div 
-            key={task._id} 
-            className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group"
-          >
-            {/* Left side: Order number and Title */}
-            <div className="flex items-center gap-4">
-              <span className="text-gray-500 font-mono text-sm">{index + 1}</span>
-              <div>
-                <h4 className="font-semibold text-gray-200 group-hover:text-white transition-colors">
-                  {task.title}
-                </h4>
-                <p className="text-xs text-gray-500 mt-1">
-                  ⏳ {task.estimatedMinutes} mins | {task.energyLevel}
-                </p>
-              </div>
-            </div>
-
-            {/* Right side: Priority Tag */}
-            <div>
-              <span className={`text-xs px-2 py-1 rounded-md font-medium border ${
-                task.priority === 'High' 
-                  ? 'bg-red-500/10 text-red-400 border-red-500/20' 
-                  : task.priority === 'Medium'
-                  ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-                  : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-              }`}>
-                {task.priority}
-              </span>
-            </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={tasks.map(t => t._id)} strategy={verticalListSortingStrategy}>
+          <div className="flex flex-col gap-3">
+            {tasks.map((task) => (
+              <SortableTaskItem key={task._id} task={task} />
+            ))}
           </div>
-        ))}
-      </div>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 };
