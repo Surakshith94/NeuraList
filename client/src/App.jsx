@@ -9,6 +9,7 @@ import SleepCountdown from './components/SleepCountdown'; // Fixed capitalizatio
 // --- FIXED: Corrected spelling of 'algorithm' ---
 import { applyEnergyWave, applyTimeBonus } from './utils/algorithm';
 import MasterTaskList from './components/MasterTaskList'; // Optional: For debugging or future features
+import ProjectSummary from './components/ProjectSummary'; // NEW: Importing the ProjectSummary component
 
 function App() {
   const [allTasks, setAllTasks] = useState([]); 
@@ -162,11 +163,14 @@ function App() {
             <p className="text-gray-400 mb-8 text-center px-6">Your tasks are synced. Let the algorithm optimize your night.</p>
             <button 
               onClick={() => setIsMoodModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-bold text-lg transition-all shadow-lg shadow-blue-500/20 cursor-pointer border border-blue-400/50"
+              className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-bold text-lg transition-all shadow-lg shadow-blue-500/20 cursor-pointer border border-blue-400/50 mb-6"
             >
               Start My Evening
             </button>
             
+            {/* NEW: The Time Allocation Summary */}
+            <ProjectSummary tasks={allTasks} />
+
             <MasterTaskList tasks={allTasks} onDelete={handleDeleteTask} />
           </div>
         ) : (
