@@ -194,7 +194,7 @@ function App() {
           </>
         )}
 
-        <MoodSelectorModal isOpen={isMoodModalOpen} onSelectMood={applyMoodAndStart} />
+        <MoodSelectorModal isOpen={isMoodModalOpen} onSelectMood={applyMoodAndStart} onClose={()=> setIsMoodModalOpen(false)} />
         <AddTaskModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onTaskAdded={handleTaskAdded} />
         <OvertimeModal 
           isOpen={isOvertimeModalOpen}
