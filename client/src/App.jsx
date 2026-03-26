@@ -8,6 +8,7 @@ import MoodSelectorModal from './components/MoodSelectorModal';
 import SleepCountdown from './components/SleepCountdown'; // Fixed capitalization
 // --- FIXED: Corrected spelling of 'algorithm' ---
 import { applyEnergyWave, applyTimeBonus } from './utils/algorithm';
+import MasterTaskList from './components/MasterTaskList'; // Optional: For debugging or future features
 
 function App() {
   const [allTasks, setAllTasks] = useState([]); 
@@ -124,6 +125,15 @@ function App() {
     }
   };
 
+  const handleDeleteTask = async (taskId) => {
+    try {
+      await axios.delete(`http://localhost:5000/api/tasks/${taskId}`);
+      setAllTasks(allTasks.filter(task => task._id !== taskId));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0d0d12] text-white p-6 md:p-12 font-sans selection:bg-green-500/30">
       <div className="max-w-md mx-auto">
@@ -156,6 +166,8 @@ function App() {
             >
               Start My Evening
             </button>
+            
+            <MasterTaskList tasks={allTasks} onDelete={handleDeleteTask} />
           </div>
         ) : (
           <>
