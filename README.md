@@ -66,10 +66,11 @@ npm run dev
 The application should now be running at `http://localhost:5173` (or the port specified by Vite).
 
 ## 🧠 Engineering Highlights
-**Overcoming Browser Memory Wipes:Engineered a dual-state system syncing React useState with browser localStorage to ensure the live stopwatch, current session mood, and custom drag-and-drop array orders survive hard page refreshes.
-**Data Archiving vs. Deletion:Designed a non-destructive database schema. Instead of DELETE requests, completed tasks use PUT requests to update a status and completedAt timestamp, allowing the frontend to generate historical productivity heatmaps.
+**Overcoming Browser Memory Wipes:** Engineered a dual-state system syncing React useState with browser localStorage to ensure the live stopwatch, current session mood, and custom drag-and-drop array orders survive hard page refreshes.
+
+**Data Archiving vs. Deletion:** Designed a non-destructive database schema. Instead of DELETE requests, completed tasks use PUT requests to update a status and completedAt timestamp, allowing the frontend to generate historical productivity heatmaps.
 
 
-**desingend by Surakshith
+**desingend by Surakshith**
  
 
