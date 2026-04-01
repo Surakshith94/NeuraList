@@ -1,44 +1,50 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 const ActiveTaskCard = ({ task, onComplete }) => {
-  const [secondsElapsed, setSecondsElapsed] = useState((task.timeSpent || 0) * 60);
+  const [secondsElapsed, setSecondsElapsed] = useState(() => {
+    const savedSeconds = localStorage.getItem(`timer_${task._id}`);
+    return savedSeconds ? parseInt(savedSeconds, 10) : (task.timeSpent || 0) * 60;
+  });
   
-  // NEW: Timer starts FALSE now
   const [isRunning, setIsRunning] = useState(false); 
-  const [hasStarted, setHasStarted] = useState(false); // Tracks if we've clicked "Start" at least once
+  const [hasStarted, setHasStarted] = useState(false); 
   
-  // NEW: Audio State
   const [audioEnabled, setAudioEnabled] = useState(false);
-  // Using a free, royalty-free Lofi beat URL for the prototype
-  const audioRef = useRef(new Audio('/audio.mp3'));
+  
+  // FIXED 1: We start with a null ref, NOT new Audio()
+  const audioRef = useRef(null);
 
-  // Setup audio settings on mount
+  // FIXED 2: We wait for the HTML element to render, then set its volume
   useEffect(() => {
-    const audio = audioRef.current;
-    audio.loop = true;
-    audio.volume = 0.4; // Keep it quiet in the background
-    return () => {
-      audio.pause();
-    };
+    if (audioRef.current) {
+      audioRef.current.volume = 0.4; 
+    }
   }, []);
 
-  // Sync audio play/pause with the timer state
+  // FIXED 3: We tell the HTML element to play/pause
   useEffect(() => {
+    if (!audioRef.current) return;
+    
     if (isRunning && audioEnabled) {
-      audioRef.current.play().catch(e => console.log("Browser blocked autoplay", e));
+      audioRef.current.play().catch(e => console.error("Audio blocked:", e));
     } else {
       audioRef.current.pause();
     }
   }, [isRunning, audioEnabled]);
 
-  // The Live Stopwatch Engine
   useEffect(() => {
     let timer;
     if (isRunning) {
-      timer = setInterval(() => setSecondsElapsed((prev) => prev + 1), 1000);
+      timer = setInterval(() => {
+        setSecondsElapsed((prev) => {
+          const newTime = prev + 1;
+          localStorage.setItem(`timer_${task._id}`, newTime);
+          return newTime;
+        });
+      }, 1000);
     }
     return () => clearInterval(timer);
-  }, [isRunning]);
+  }, [isRunning, task._id]);
 
   const toggleTimer = () => {
     if (!hasStarted) setHasStarted(true);
@@ -46,6 +52,7 @@ const ActiveTaskCard = ({ task, onComplete }) => {
   };
 
   const handleDone = () => {
+    localStorage.removeItem(`timer_${task._id}`);
     const actualMinutesSpent = Math.round(secondsElapsed / 60);
     onComplete(task._id, actualMinutesSpent);
   };
@@ -81,7 +88,6 @@ const ActiveTaskCard = ({ task, onComplete }) => {
           </div>
           
           <div className="flex flex-col items-end gap-2">
-            {/* Added Project Badge here as requested earlier! */}
             <span className="bg-purple-500/10 px-3 py-1 rounded-full text-xs font-bold text-purple-400 border border-purple-500/20">
               📁 {task.project || 'General'}
             </span>
@@ -101,10 +107,9 @@ const ActiveTaskCard = ({ task, onComplete }) => {
             </div>
           </div>
 
-          {/* NEW: Audio Toggle Button */}
           <button 
             onClick={() => setAudioEnabled(!audioEnabled)}
-            className={`p-3 rounded-xl border transition-colors ${
+            className={`p-3 rounded-xl border transition-colors cursor-pointer ${
               audioEnabled ? 'bg-blue-500/20 border-blue-500/40 text-blue-400' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white'
             }`}
             title="Toggle Focus Audio"
@@ -118,7 +123,6 @@ const ActiveTaskCard = ({ task, onComplete }) => {
             ✅ Done
           </button>
           
-          {/* UPGRADED: Dynamic Start/Pause/Resume Button */}
           <button 
             onClick={toggleTimer}
             className={`flex-1 py-4 rounded-2xl font-bold text-lg transition-colors cursor-pointer border ${
@@ -130,6 +134,9 @@ const ActiveTaskCard = ({ task, onComplete }) => {
             {isRunning ? '⏸ Pause' : (!hasStarted ? '▶️ Start Task' : '▶️ Resume')}
           </button>
         </div>
+
+        {/* FIXED 4: This invisible HTML element is what actually plays the audio.mp3 file */}
+        <audio ref={audioRef} src="/audio.mp3" loop className="hidden" />
 
       </div>
     </div>

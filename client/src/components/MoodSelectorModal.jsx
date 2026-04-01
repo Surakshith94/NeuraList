@@ -3,19 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 
 const MoodSelectorModal = ({ isOpen, onSelectMood, onClose }) => {
   return (
+    // onOpenChange={onClose} is what handles the "click outside to close" feature!
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[425px] bg-[#121218] border-white/10 text-white rounded-[24px]">
         
-        <DialogHeader className="relative">
-          {/* NEW: Custom Back Button */}
-          <button 
-            onClick={onClose}
-            className="absolute -top-2 -left-2 text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
-          >
-            ← Back
-          </button>
-          
-          <DialogTitle className="text-2xl font-bold text-center mt-4 mb-2">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-bold text-center mb-2">
             How are you feeling?
           </DialogTitle>
           <DialogDescription className="text-gray-400 text-center">

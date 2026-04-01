@@ -6,7 +6,7 @@ const TaskSchema = new mongoose.Schema({
   priority: { type: String, default: 'Medium' },
   energyLevel: { type: String, default: 'Neutral' },
   project: { type: String, default: 'General' },
-  // --- NEW: For the Heatmap ---
+  // These two are required for your Heatmap!
   status: { type: String, default: 'active' }, 
   completedAt: { type: Date, default: null }
 });

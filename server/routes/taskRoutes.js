@@ -1,73 +1,53 @@
 const express = require('express');
 const router = express.Router();
-const Task = require('../models/Task'); // Importing our blueprint
+const Task = require('../models/Task');
 
-// POST: Create a new task
-router.post('/', async (req, res) => {
-  try {
-    // req.body contains the data sent from the frontend (title, energyLevel, etc.)
-    const newTask = new Task(req.body); 
-    const savedTask = await newTask.save(); // Saves to MongoDB
-    
-    res.status(201).json(savedTask); // Send back the saved task as confirmation
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// PUT: Update Task Status (Start, Pause, or Complete)
-router.put('/:id/status', async (req, res) => {
-  try {
-    const { action } = req.body; // 'start', 'pause', or 'complete'
-    const task = await Task.findById(req.params.id);
-
-    if (!task) return res.status(404).json({ message: 'Task not found' });
-
-    const now = new Date();
-
-    if (action === 'start') {
-      task.status = 'Active';
-      task.lastStartedAt = now;
-    } 
-    
-    else if (action === 'pause' || action === 'complete') {
-      // Calculate how long it was active
-      if (task.lastStartedAt) {
-        const diffMs = now - task.lastStartedAt;
-        const diffMins = Math.floor(diffMs / 60000);
-        task.timeSpent += diffMins;
-      }
-      
-      task.status = action === 'pause' ? 'Paused' : 'Completed';
-      task.lastStartedAt = null; // Reset the clock
-    }
-
-    const updatedTask = await task.save();
-    res.status(200).json(updatedTask);
-    
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET: Fetch all tasks
+// 1. GET all tasks (This is what was throwing your 500 error)
 router.get('/', async (req, res) => {
   try {
-    const tasks = await Task.find(); // Retrieves everything in the tasks collection
-    res.status(200).json(tasks);
+    const tasks = await Task.find();
+    res.json(tasks);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Error fetching tasks:", err);
+    res.status(500).json({ message: err.message });
   }
 });
 
-// DELETE: Mark a task as complete and remove it
+// 2. POST a new task
+router.post('/', async (req, res) => {
+  try {
+    const newTask = new Task(req.body);
+    const savedTask = await newTask.save();
+    res.status(201).json(savedTask);
+  } catch (err) {
+    console.error("Error saving task:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 3. PUT (Update/Archive) a task - REQUIRED FOR HEATMAP
+router.put('/:id', async (req, res) => {
+  try {
+    const updatedTask = await Task.findByIdAndUpdate(
+      req.params.id, 
+      req.body, 
+      { new: true } // Returns the updated document
+    );
+    res.json(updatedTask);
+  } catch (err) {
+    console.error("Error updating task:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 4. DELETE a task
 router.delete('/:id', async (req, res) => {
   try {
-    // req.params.id grabs the unique ID from the URL
     await Task.findByIdAndDelete(req.params.id);
-    res.status(200).json({ message: 'Task completed and removed!' });
+    res.json({ message: 'Task permanently deleted' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Error deleting task:", err);
+    res.status(500).json({ message: err.message });
   }
 });
 
