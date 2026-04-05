@@ -4,6 +4,7 @@ import ActiveTaskCard from './components/ActiveTaskCard';
 import OvertimeModal from './components/OvertimeModal';
 import TaskQueue from './components/TaskQueue'; 
 import AddTaskModal from './components/AddTaskModal'; 
+import EditTaskModal from './components/EditTaskModal'; // <-- NEW IMPORT
 import MoodSelectorModal from './components/MoodSelectorModal'; 
 import SleepCountdown from './components/SleepCountdown'; 
 import { applyEnergyWave, applyTimeBonus } from './utils/algorithm';
@@ -23,8 +24,11 @@ function App() {
   const [isMoodModalOpen, setIsMoodModalOpen] = useState(false);
   const [isOvertimeModalOpen, setIsOvertimeModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  
+  // --- NEW: Edit Modal State ---
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [taskToEdit, setTaskToEdit] = useState(null);
 
-  // --- UPGRADED: Save the IDs of the active task and queue to storage ---
   const syncLayoutToStorage = (active, queue) => {
     if (active) localStorage.setItem('activeTaskId', active._id);
     else localStorage.removeItem('activeTaskId');
@@ -54,7 +58,7 @@ function App() {
     if (processedTasks.length > 0) {
       setActiveTask(processedTasks[0]);
       setQueueTasks(processedTasks.slice(1));
-      syncLayoutToStorage(processedTasks[0], processedTasks.slice(1)); // Save the initial algorithm layout
+      syncLayoutToStorage(processedTasks[0], processedTasks.slice(1)); 
     } else {
       setActiveTask(null);
       setQueueTasks([]);
@@ -68,20 +72,17 @@ function App() {
         const response = await axios.get('http://localhost:5000/api/tasks');
         setAllTasks(response.data);
         
-        // --- UPGRADED: Re-hydrate using exact saved IDs to preserve drag-and-drop order ---
         if (localStorage.getItem('hasEveningStarted') === 'true') {
           const savedActiveId = localStorage.getItem('activeTaskId');
           const savedQueueIds = JSON.parse(localStorage.getItem('queueTaskIds') || '[]');
 
           const hydratedActive = response.data.find(t => t._id === savedActiveId) || null;
-          // Assemble the queue in the EXACT order of the saved IDs
           const hydratedQueue = savedQueueIds.map(id => response.data.find(t => t._id === id)).filter(Boolean);
 
           if (hydratedActive) {
             setActiveTask(hydratedActive);
             setQueueTasks(hydratedQueue);
           } else {
-            // Failsafe: if data is missing, re-run the algorithm
             const savedMood = localStorage.getItem('currentMood');
             processAndQueueTasks(savedMood, response.data);
           }
@@ -110,7 +111,6 @@ function App() {
     setActiveTask(null);
     setQueueTasks([]);
     
-    // Wipe EVERYTHING from storage so we start fresh next time
     localStorage.removeItem('hasEveningStarted');
     localStorage.removeItem('currentMood');
     localStorage.removeItem('activeTaskId');
@@ -131,6 +131,30 @@ function App() {
         syncLayoutToStorage(activeTask, newQueue);
       }
     }
+  };
+
+  // --- NEW: Handle opening the Edit modal ---
+  const openEditModal = (task) => {
+    setTaskToEdit(task);
+    setIsEditModalOpen(true);
+  };
+
+  // --- NEW: Update React state when a task is edited ---
+  const handleTaskUpdated = (updatedTask) => {
+    // 1. Update the master list
+    const updatedAllTasks = allTasks.map(t => t._id === updatedTask._id ? updatedTask : t);
+    setAllTasks(updatedAllTasks);
+
+    // 2. Update active task if it's the one being edited
+    if (activeTask && activeTask._id === updatedTask._id) {
+      setActiveTask(updatedTask);
+      syncLayoutToStorage(updatedTask, queueTasks);
+    }
+
+    // 3. Update the queue if it's sitting in the queue
+    const updatedQueue = queueTasks.map(t => t._id === updatedTask._id ? updatedTask : t);
+    setQueueTasks(updatedQueue);
+    syncLayoutToStorage(activeTask, updatedQueue);
   };
 
   const handleComplete = async (taskId, actualMinutesSpent) => {
@@ -158,7 +182,7 @@ function App() {
       if (updatedQueue.length > 0) {
         setActiveTask(updatedQueue[0]);
         setQueueTasks(updatedQueue.slice(1));
-        syncLayoutToStorage(updatedQueue[0], updatedQueue.slice(1)); // Save new state
+        syncLayoutToStorage(updatedQueue[0], updatedQueue.slice(1)); 
       } else {
         setActiveTask(null);
         setQueueTasks([]);
@@ -178,7 +202,6 @@ function App() {
     }
   };
 
-  // --- UPGRADED: Save the new queue order when you drag and drop ---
   const handleReorderQueue = (newOrderedTasks) => {
     setQueueTasks(newOrderedTasks);
     syncLayoutToStorage(activeTask, newOrderedTasks);
@@ -210,7 +233,13 @@ function App() {
             <button onClick={() => setIsMoodModalOpen(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-bold text-lg transition-all shadow-lg shadow-blue-500/20 cursor-pointer border border-blue-400/50 mb-6">Start My Evening</button>
             <ConsistencyHeatmap tasks={allTasks} />
             <ProjectSummary tasks={allTasks.filter(t => t.status !== 'completed')} />
-            <MasterTaskList tasks={allTasks.filter(task => task.status !== 'completed')} onDelete={handleDeleteTask} />
+            
+            {/* UPGRADED: Pass the openEditModal function down */}
+            <MasterTaskList 
+              tasks={allTasks.filter(task => task.status !== 'completed')} 
+              onDelete={handleDeleteTask} 
+              onEdit={openEditModal} 
+            />
           </div>
         ) : (
           <>
@@ -230,13 +259,21 @@ function App() {
               </div>
             )}
 
-            {/* UPGRADED: Passes the new handleReorderQueue function */}
             <TaskQueue tasks={queueTasks} onReorder={handleReorderQueue} />
           </>
         )}
 
         <MoodSelectorModal isOpen={isMoodModalOpen} onSelectMood={applyMoodAndStart} onClose={() => setIsMoodModalOpen(false)} />
         <AddTaskModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onTaskAdded={handleTaskAdded} />
+        
+        {/* NEW: Render the Edit Modal */}
+        <EditTaskModal 
+          isOpen={isEditModalOpen} 
+          onClose={() => setIsEditModalOpen(false)} 
+          taskToEdit={taskToEdit} 
+          onTaskUpdated={handleTaskUpdated} 
+        />
+
         <OvertimeModal isOpen={isOvertimeModalOpen} taskTitle={activeTask?.title} overtimeMinutes={activeTask ? activeTask.timeSpent - activeTask.estimatedMinutes : 0} onDropTask={() => setIsOvertimeModalOpen(false)} onPushBedtime={() => setIsOvertimeModalOpen(false)} />
       </div>
     </div>

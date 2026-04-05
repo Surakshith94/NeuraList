@@ -1,6 +1,7 @@
 import React from 'react';
 
-const MasterTaskList = ({ tasks, onDelete }) => {
+// Notice we added onEdit here!
+const MasterTaskList = ({ tasks, onDelete, onEdit }) => {
   if (!tasks || tasks.length === 0) return null;
 
   return (
@@ -15,9 +16,17 @@ const MasterTaskList = ({ tasks, onDelete }) => {
               <h4 className="font-semibold text-gray-200 group-hover:text-white transition-colors">{task.title}</h4>
               <p className="text-xs text-gray-500 mt-1">⏳ {task.estimatedMinutes} mins | {task.energyLevel}</p>
             </div>
-            <button onClick={() => onDelete(task._id)} className="text-gray-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-lg transition-colors cursor-pointer">
-              🗑️
-            </button>
+            
+            {/* The new Button Row */}
+            <div className="flex items-center gap-2">
+              <button onClick={() => onEdit(task)} className="text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 p-2 rounded-lg transition-colors cursor-pointer" title="Edit Task">
+                ✏️
+              </button>
+              <button onClick={() => onDelete(task._id)} className="text-gray-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-lg transition-colors cursor-pointer" title="Delete Task">
+                🗑️
+              </button>
+            </div>
+
           </div>
         ))}
       </div>
