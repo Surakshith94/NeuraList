@@ -4,13 +4,15 @@ import ActiveTaskCard from './components/ActiveTaskCard';
 import OvertimeModal from './components/OvertimeModal';
 import TaskQueue from './components/TaskQueue'; 
 import AddTaskModal from './components/AddTaskModal'; 
-import EditTaskModal from './components/EditTaskModal'; // <-- NEW IMPORT
+import EditTaskModal from './components/EditTaskModal'; 
 import MoodSelectorModal from './components/MoodSelectorModal'; 
 import SleepCountdown from './components/SleepCountdown'; 
 import { applyEnergyWave, applyTimeBonus } from './utils/algorithm';
 import MasterTaskList from './components/MasterTaskList'; 
 import ProjectSummary from './components/ProjectSummary'; 
-import ConsistencyHeatmap from './components/ConsistencyHeatmap'; 
+import ConsistencyHeatmap from './components/ConsistencyHeatmap';
+// FIXED: The import line is now complete!
+import EveningProgressBar from './components/ProgressBar'; 
 
 function App() {
   const [allTasks, setAllTasks] = useState([]); 
@@ -25,7 +27,6 @@ function App() {
   const [isOvertimeModalOpen, setIsOvertimeModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   
-  // --- NEW: Edit Modal State ---
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState(null);
 
@@ -39,26 +40,87 @@ function App() {
   const processAndQueueTasks = (mood, rawTasks) => {
     let processedTasks = rawTasks.filter(task => task.status !== 'completed');
 
-    if (mood === 'Burned Out') {
-      processedTasks = processedTasks.filter(task => task.energyLevel === 'Recharge' || task.priority === 'High');
-      processedTasks = processedTasks.map(task => {
-        if (task.priority === 'High' && task.energyLevel !== 'Recharge') {
-          return { ...task, estimatedMinutes: Math.min(task.estimatedMinutes, 25), title: `🚨 Sprint: ${task.title}` };
+    // 1. FILTERING: High Priority tasks NEVER get deleted, regardless of mood.
+    processedTasks = processedTasks.filter(task => {
+      if (task.priority === 'High') return true; // ALWAYS keep High Priority
+
+      // Only hide lower priority tasks if they don't match the mood
+      if (mood === 'Burned Out') return task.energyLevel === 'Recharge';
+      if (mood === 'Neutral') return task.energyLevel !== 'High Focus';
+      
+      return true; // Energized keeps everything
+    });
+
+    // 2. MICRO-SPRINTS: Force short bursts for hard tasks when you are tired
+    processedTasks = processedTasks.map(task => {
+      if (task.priority === 'High') {
+        if (mood === 'Burned Out' && task.energyLevel !== 'Recharge') {
+          // Burned out? Just do 10 minutes of the hard stuff.
+          return { ...task, estimatedMinutes: Math.min(task.estimatedMinutes, 10), title: `🚨 Micro-Sprint: ${task.title}` };
+        } else if (mood === 'Neutral' && task.energyLevel === 'High Focus') {
+          // Neutral but heavy task? Just do 15 minutes.
+          return { ...task, estimatedMinutes: Math.min(task.estimatedMinutes, 15), title: `🚨 Sprint: ${task.title}` };
         }
-        return task;
-      });
-    } else {
-      if (mood === 'Neutral') processedTasks = processedTasks.filter(task => task.energyLevel !== 'High Focus');
+      }
+      return task;
+    });
+
+    // 3. Optional: Apply Energy Wave for long tasks if you feel okay
+    if (mood !== 'Burned Out') {
       processedTasks = applyEnergyWave(processedTasks);
     }
 
-    const priorityValues = { 'High': 3, 'Medium': 2, 'Low': 1 };
-    processedTasks.sort((a, b) => priorityValues[b.priority] - priorityValues[a.priority]);
+    // 4. Calculate Time Until Bedtime
+    const now = new Date();
+    const bedtime = new Date();
+    bedtime.setHours(23, 0, 0, 0); // 11:00 PM
+    if (now > bedtime) bedtime.setDate(bedtime.getDate() + 1);
 
-    if (processedTasks.length > 0) {
-      setActiveTask(processedTasks[0]);
-      setQueueTasks(processedTasks.slice(1));
-      syncLayoutToStorage(processedTasks[0], processedTasks.slice(1)); 
+    let minutesUntilSleep = Math.floor((bedtime - now) / 60000);
+    if (minutesUntilSleep <= 0) minutesUntilSleep = 60; // Failsafe
+
+    // 5. Group by Priority (Guarantees High Priority is always FIRST)
+    const highTasks = processedTasks.filter(t => t.priority === 'High');
+    const medTasks = processedTasks.filter(t => t.priority === 'Medium');
+    const lowTasks = processedTasks.filter(t => t.priority === 'Low');
+
+    let finalQueue = [];
+    let timeRemaining = minutesUntilSleep;
+
+    // 6. Proportional Squeezing (Fits tasks into the time you have left)
+    const processGroup = (group) => {
+      if (group.length === 0 || timeRemaining <= 0) return;
+
+      const groupTotalTime = group.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+
+      if (groupTotalTime <= timeRemaining) {
+        finalQueue.push(...group);
+        timeRemaining -= groupTotalTime;
+      } else {
+        // Squeeze them down to fit!
+        const ratio = timeRemaining / groupTotalTime;
+        group.forEach(t => {
+          const squeezedTime = Math.max(5, Math.floor(t.estimatedMinutes * ratio)); // Never go below 5 mins
+          finalQueue.push({
+            ...t,
+            estimatedMinutes: squeezedTime,
+            title: t.title.includes('Sprint') ? t.title : `⏱️ Squeezed: ${t.title}`
+          });
+        });
+        timeRemaining = 0; 
+      }
+    };
+
+    // Process High priority first, then Medium, then Low
+    processGroup(highTasks);
+    processGroup(medTasks);
+    processGroup(lowTasks);
+
+    // 7. Update the UI
+    if (finalQueue.length > 0) {
+      setActiveTask(finalQueue[0]);
+      setQueueTasks(finalQueue.slice(1));
+      syncLayoutToStorage(finalQueue[0], finalQueue.slice(1)); 
     } else {
       setActiveTask(null);
       setQueueTasks([]);
@@ -133,25 +195,20 @@ function App() {
     }
   };
 
-  // --- NEW: Handle opening the Edit modal ---
   const openEditModal = (task) => {
     setTaskToEdit(task);
     setIsEditModalOpen(true);
   };
 
-  // --- NEW: Update React state when a task is edited ---
   const handleTaskUpdated = (updatedTask) => {
-    // 1. Update the master list
     const updatedAllTasks = allTasks.map(t => t._id === updatedTask._id ? updatedTask : t);
     setAllTasks(updatedAllTasks);
 
-    // 2. Update active task if it's the one being edited
     if (activeTask && activeTask._id === updatedTask._id) {
       setActiveTask(updatedTask);
       syncLayoutToStorage(updatedTask, queueTasks);
     }
 
-    // 3. Update the queue if it's sitting in the queue
     const updatedQueue = queueTasks.map(t => t._id === updatedTask._id ? updatedTask : t);
     setQueueTasks(updatedQueue);
     syncLayoutToStorage(activeTask, updatedQueue);
@@ -234,7 +291,6 @@ function App() {
             <ConsistencyHeatmap tasks={allTasks} />
             <ProjectSummary tasks={allTasks.filter(t => t.status !== 'completed')} />
             
-            {/* UPGRADED: Pass the openEditModal function down */}
             <MasterTaskList 
               tasks={allTasks.filter(task => task.status !== 'completed')} 
               onDelete={handleDeleteTask} 
@@ -251,6 +307,8 @@ function App() {
               <button onClick={handleEndSession} className="text-xs font-bold text-gray-400 hover:text-white transition-colors border border-white/10 hover:border-white/30 bg-white/5 px-4 py-2 rounded-full cursor-pointer flex items-center gap-2">🏠 Back to Dashboard</button>
             </div>
 
+            <EveningProgressBar activeTask={activeTask} queueTasks={queueTasks} />
+
             {activeTask ? (
               <ActiveTaskCard task={activeTask} onComplete={handleComplete} />
             ) : (
@@ -266,7 +324,6 @@ function App() {
         <MoodSelectorModal isOpen={isMoodModalOpen} onSelectMood={applyMoodAndStart} onClose={() => setIsMoodModalOpen(false)} />
         <AddTaskModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onTaskAdded={handleTaskAdded} />
         
-        {/* NEW: Render the Edit Modal */}
         <EditTaskModal 
           isOpen={isEditModalOpen} 
           onClose={() => setIsEditModalOpen(false)} 
