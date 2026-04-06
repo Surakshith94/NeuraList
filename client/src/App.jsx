@@ -11,8 +11,8 @@ import { applyEnergyWave, applyTimeBonus } from './utils/algorithm';
 import MasterTaskList from './components/MasterTaskList'; 
 import ProjectSummary from './components/ProjectSummary'; 
 import ConsistencyHeatmap from './components/ConsistencyHeatmap';
-// FIXED: The import line is now complete!
-import EveningProgressBar from './components/ProgressBar'; 
+import EveningTimeline from './components/ProgressBar';
+import RechargeCheckModal from './components/RechargeCheckModal';
 
 function App() {
   const [allTasks, setAllTasks] = useState([]); 
@@ -30,6 +30,10 @@ function App() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState(null);
 
+  // Recharge Modal State
+  const [isRechargeModalOpen, setIsRechargeModalOpen] = useState(false);
+  const [pendingCompletionData, setPendingCompletionData] = useState(null);
+
   const syncLayoutToStorage = (active, queue) => {
     if (active) localStorage.setItem('activeTaskId', active._id);
     else localStorage.removeItem('activeTaskId');
@@ -42,23 +46,20 @@ function App() {
 
     // 1. FILTERING: High Priority tasks NEVER get deleted, regardless of mood.
     processedTasks = processedTasks.filter(task => {
-      if (task.priority === 'High') return true; // ALWAYS keep High Priority
+      if (task.priority === 'High') return true; 
 
-      // Only hide lower priority tasks if they don't match the mood
       if (mood === 'Burned Out') return task.energyLevel === 'Recharge';
       if (mood === 'Neutral') return task.energyLevel !== 'High Focus';
       
-      return true; // Energized keeps everything
+      return true; 
     });
 
-    // 2. MICRO-SPRINTS: Force short bursts for hard tasks when you are tired
+    // 2. MICRO-SPRINTS
     processedTasks = processedTasks.map(task => {
       if (task.priority === 'High') {
         if (mood === 'Burned Out' && task.energyLevel !== 'Recharge') {
-          // Burned out? Just do 10 minutes of the hard stuff.
           return { ...task, estimatedMinutes: Math.min(task.estimatedMinutes, 10), title: `🚨 Micro-Sprint: ${task.title}` };
         } else if (mood === 'Neutral' && task.energyLevel === 'High Focus') {
-          // Neutral but heavy task? Just do 15 minutes.
           return { ...task, estimatedMinutes: Math.min(task.estimatedMinutes, 15), title: `🚨 Sprint: ${task.title}` };
         }
       }
@@ -73,13 +74,13 @@ function App() {
     // 4. Calculate Time Until Bedtime
     const now = new Date();
     const bedtime = new Date();
-    bedtime.setHours(23, 0, 0, 0); // 11:00 PM
+    bedtime.setHours(23, 0, 0, 0); 
     if (now > bedtime) bedtime.setDate(bedtime.getDate() + 1);
 
     let minutesUntilSleep = Math.floor((bedtime - now) / 60000);
-    if (minutesUntilSleep <= 0) minutesUntilSleep = 60; // Failsafe
+    if (minutesUntilSleep <= 0) minutesUntilSleep = 60; 
 
-    // 5. Group by Priority (Guarantees High Priority is always FIRST)
+    // 5. Group by Priority
     const highTasks = processedTasks.filter(t => t.priority === 'High');
     const medTasks = processedTasks.filter(t => t.priority === 'Medium');
     const lowTasks = processedTasks.filter(t => t.priority === 'Low');
@@ -87,7 +88,7 @@ function App() {
     let finalQueue = [];
     let timeRemaining = minutesUntilSleep;
 
-    // 6. Proportional Squeezing (Fits tasks into the time you have left)
+    // 6. Proportional Squeezing
     const processGroup = (group) => {
       if (group.length === 0 || timeRemaining <= 0) return;
 
@@ -97,10 +98,9 @@ function App() {
         finalQueue.push(...group);
         timeRemaining -= groupTotalTime;
       } else {
-        // Squeeze them down to fit!
         const ratio = timeRemaining / groupTotalTime;
         group.forEach(t => {
-          const squeezedTime = Math.max(5, Math.floor(t.estimatedMinutes * ratio)); // Never go below 5 mins
+          const squeezedTime = Math.max(5, Math.floor(t.estimatedMinutes * ratio)); 
           finalQueue.push({
             ...t,
             estimatedMinutes: squeezedTime,
@@ -111,7 +111,6 @@ function App() {
       }
     };
 
-    // Process High priority first, then Medium, then Low
     processGroup(highTasks);
     processGroup(medTasks);
     processGroup(lowTasks);
@@ -214,18 +213,10 @@ function App() {
     syncLayoutToStorage(activeTask, updatedQueue);
   };
 
-  const handleComplete = async (taskId, actualMinutesSpent) => {
-    const timeSpent = actualMinutesSpent || activeTask.estimatedMinutes;
-    const overtime = timeSpent - activeTask.estimatedMinutes;
+  const finalizeTaskCompletion = async (taskId, timeSpent) => {
     const undertime = activeTask.estimatedMinutes - timeSpent;
-
-    if (overtime > 0) {
-      setActiveTask({ ...activeTask, timeSpent: timeSpent }); 
-      setIsOvertimeModalOpen(true);
-      return; 
-    }
-
     let updatedQueue = [...queueTasks];
+
     if (undertime > 0) {
       updatedQueue = applyTimeBonus(updatedQueue, undertime);
     }
@@ -248,6 +239,41 @@ function App() {
     } catch (error) {
       console.error("Error completing task:", error);
     }
+  };
+
+  const handleComplete = async (taskId, actualMinutesSpent) => {
+    const timeSpent = actualMinutesSpent || activeTask.estimatedMinutes;
+    const overtime = timeSpent - activeTask.estimatedMinutes;
+
+    if (overtime > 0) {
+      setActiveTask({ ...activeTask, timeSpent: timeSpent }); 
+      setIsOvertimeModalOpen(true);
+      return; 
+    }
+
+    if (activeTask.energyLevel === 'Recharge' && currentMood !== 'Energized') {
+      setPendingCompletionData({ taskId, timeSpent });
+      setIsRechargeModalOpen(true);
+      return;
+    }
+
+    finalizeTaskCompletion(taskId, timeSpent);
+  };
+
+  const handleLevelUpMood = () => {
+    setIsRechargeModalOpen(false);
+    const newMood = currentMood === 'Burned Out' ? 'Neutral' : 'Energized';
+    setCurrentMood(newMood);
+    localStorage.setItem('currentMood', newMood);
+    
+    finalizeTaskCompletion(pendingCompletionData.taskId, pendingCompletionData.timeSpent).then(() => {
+      processAndQueueTasks(newMood, allTasks);
+    });
+  };
+
+  const handleStayRelaxed = () => {
+    setIsRechargeModalOpen(false);
+    finalizeTaskCompletion(pendingCompletionData.taskId, pendingCompletionData.timeSpent);
   };
 
   const handleDeleteTask = async (taskId) => {
@@ -307,7 +333,7 @@ function App() {
               <button onClick={handleEndSession} className="text-xs font-bold text-gray-400 hover:text-white transition-colors border border-white/10 hover:border-white/30 bg-white/5 px-4 py-2 rounded-full cursor-pointer flex items-center gap-2">🏠 Back to Dashboard</button>
             </div>
 
-            <EveningProgressBar activeTask={activeTask} queueTasks={queueTasks} />
+            <EveningTimeline activeTask={activeTask} queueTasks={queueTasks} />
 
             {activeTask ? (
               <ActiveTaskCard task={activeTask} onComplete={handleComplete} />
@@ -329,6 +355,12 @@ function App() {
           onClose={() => setIsEditModalOpen(false)} 
           taskToEdit={taskToEdit} 
           onTaskUpdated={handleTaskUpdated} 
+        />
+
+        <RechargeCheckModal 
+          isOpen={isRechargeModalOpen} 
+          onLevelUp={handleLevelUpMood} 
+          onStayRelaxed={handleStayRelaxed} 
         />
 
         <OvertimeModal isOpen={isOvertimeModalOpen} taskTitle={activeTask?.title} overtimeMinutes={activeTask ? activeTask.timeSpent - activeTask.estimatedMinutes : 0} onDropTask={() => setIsOvertimeModalOpen(false)} onPushBedtime={() => setIsOvertimeModalOpen(false)} />

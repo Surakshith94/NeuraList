@@ -8,20 +8,16 @@ const ActiveTaskCard = ({ task, onComplete }) => {
   
   const [isRunning, setIsRunning] = useState(false); 
   const [hasStarted, setHasStarted] = useState(false); 
-  
   const [audioEnabled, setAudioEnabled] = useState(false);
   
-  // FIXED 1: We start with a null ref, NOT new Audio()
   const audioRef = useRef(null);
 
-  // FIXED 2: We wait for the HTML element to render, then set its volume
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = 0.4; 
     }
   }, []);
 
-  // FIXED 3: We tell the HTML element to play/pause
   useEffect(() => {
     if (!audioRef.current) return;
     
@@ -55,6 +51,16 @@ const ActiveTaskCard = ({ task, onComplete }) => {
     localStorage.removeItem(`timer_${task._id}`);
     const actualMinutesSpent = Math.round(secondsElapsed / 60);
     onComplete(task._id, actualMinutesSpent);
+  };
+
+  // FIXED: Function logic stays up here!
+  const handleReset = () => {
+    if (window.confirm("Are you sure you want to reset this timer to 0?")) {
+      setIsRunning(false);
+      setSecondsElapsed(0);
+      localStorage.removeItem(`timer_${task._id}`);
+      setHasStarted(false);
+    }
   };
 
   const formatTime = (totalSeconds) => {
@@ -107,15 +113,25 @@ const ActiveTaskCard = ({ task, onComplete }) => {
             </div>
           </div>
 
-          <button 
-            onClick={() => setAudioEnabled(!audioEnabled)}
-            className={`p-3 rounded-xl border transition-colors cursor-pointer ${
-              audioEnabled ? 'bg-blue-500/20 border-blue-500/40 text-blue-400' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white'
-            }`}
-            title="Toggle Focus Audio"
-          >
-            {audioEnabled ? '🎧 Audio On' : '🔇 Audio Off'}
-          </button>
+          {/* FIXED: The Reset button is now placed correctly next to the Audio button */}
+          <div className="flex gap-2">
+            <button 
+              onClick={handleReset}
+              className="p-3 rounded-xl bg-white/5 border border-white/10 text-gray-500 hover:text-red-400 hover:border-red-500/30 transition-colors cursor-pointer"
+              title="Reset Timer"
+            >
+              🔄 Reset
+            </button>
+            <button 
+              onClick={() => setAudioEnabled(!audioEnabled)}
+              className={`p-3 rounded-xl border transition-colors cursor-pointer ${
+                audioEnabled ? 'bg-blue-500/20 border-blue-500/40 text-blue-400' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white'
+              }`}
+              title="Toggle Focus Audio"
+            >
+              {audioEnabled ? '🎧 Audio On' : '🔇 Audio Off'}
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-4">
@@ -135,7 +151,6 @@ const ActiveTaskCard = ({ task, onComplete }) => {
           </button>
         </div>
 
-        {/* FIXED 4: This invisible HTML element is what actually plays the audio.mp3 file */}
         <audio ref={audioRef} src="/audio.mp3" loop className="hidden" />
 
       </div>
