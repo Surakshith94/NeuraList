@@ -276,6 +276,30 @@ function App() {
     finalizeTaskCompletion(pendingCompletionData.taskId, pendingCompletionData.timeSpent);
   };
 
+  const handleRestoreTask = async (taskId) => {
+    try {
+      // 1. Tell the backend to un-archive it and reset the time spent to 0
+      await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { 
+        status: 'Pending', 
+        completedAt: null,
+        timeSpent: 0 
+      });
+
+      // 2. Update the React State locally
+      const updatedTasks = allTasks.map(t => 
+        t._id === taskId ? { ...t, status: 'Pending', completedAt: null, timeSpent: 0 } : t
+      );
+      setAllTasks(updatedTasks);
+
+      // 3. If the evening is currently running, push it right back into the algorithm!
+      if (hasEveningStarted) {
+        processAndQueueTasks(currentMood, updatedTasks);
+      }
+    } catch (error) {
+      console.error("Error restoring task:", error);
+    }
+  };
+
   const handleDeleteTask = async (taskId) => {
     try {
       await axios.delete(`http://localhost:5000/api/tasks/${taskId}`);
@@ -318,9 +342,10 @@ function App() {
             <ProjectSummary tasks={allTasks.filter(t => t.status !== 'completed')} />
             
             <MasterTaskList 
-              tasks={allTasks.filter(task => task.status !== 'completed')} 
+              tasks={allTasks} 
               onDelete={handleDeleteTask} 
               onEdit={openEditModal} 
+              onRestore={handleRestoreTask}
             />
           </div>
         ) : (
