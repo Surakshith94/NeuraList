@@ -10,17 +10,18 @@ const ActiveTaskCard = ({ task, onComplete }) => {
   const [hasStarted, setHasStarted] = useState(false); 
   const [audioEnabled, setAudioEnabled] = useState(false);
   
-  const audioRef = useRef(null);
+  const audioRef = useRef(null); // Background music
+  const alarmRef = useRef(null); // NEW: Alarm bell
 
+  // Setup background audio volume
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = 0.4; 
-    }
+    if (audioRef.current) audioRef.current.volume = 0.4; 
+    if (alarmRef.current) alarmRef.current.volume = 1.0; // Keep alarm loud
   }, []);
 
+  // Handle Background Music
   useEffect(() => {
     if (!audioRef.current) return;
-    
     if (isRunning && audioEnabled) {
       audioRef.current.play().catch(e => console.error("Audio blocked:", e));
     } else {
@@ -28,19 +29,40 @@ const ActiveTaskCard = ({ task, onComplete }) => {
     }
   }, [isRunning, audioEnabled]);
 
+  // UPGRADE 1: The Bulletproof Background Timer
   useEffect(() => {
-    let timer;
+    let interval;
     if (isRunning) {
-      timer = setInterval(() => {
-        setSecondsElapsed((prev) => {
-          const newTime = prev + 1;
-          localStorage.setItem(`timer_${task._id}`, newTime);
-          return newTime;
-        });
+      // Capture the EXACT real-world time we hit play
+      const timeAtStart = Date.now();
+      const secondsAtStart = secondsElapsed;
+
+      interval = setInterval(() => {
+        // Calculate the true delta from the system clock
+        const actualSecondsPassed = Math.floor((Date.now() - timeAtStart) / 1000);
+        const trueCurrentTime = secondsAtStart + actualSecondsPassed;
+        
+        setSecondsElapsed(trueCurrentTime);
+        localStorage.setItem(`timer_${task._id}`, trueCurrentTime);
       }, 1000);
     }
-    return () => clearInterval(timer);
-  }, [isRunning, task._id]);
+    return () => clearInterval(interval);
+  }, [isRunning]); // ONLY re-runs when you hit play/pause
+
+  // UPGRADE 2: The Alarm Trigger
+  useEffect(() => {
+    const targetSeconds = task.estimatedMinutes * 60;
+    
+    // If the timer EXACTLY hits the target limit, ring the bell!
+    if (isRunning && secondsElapsed === targetSeconds) {
+      if (alarmRef.current) {
+        alarmRef.current.play().catch(e => console.error("Alarm blocked:", e));
+      }
+      
+      // Optional: Add a browser popup notification so it interrupts you in other tabs
+      // alert(`Time's up for: ${task.title}!`); 
+    }
+  }, [secondsElapsed, isRunning, task.estimatedMinutes, task.title]);
 
   const toggleTimer = () => {
     if (!hasStarted) setHasStarted(true);
@@ -53,7 +75,6 @@ const ActiveTaskCard = ({ task, onComplete }) => {
     onComplete(task._id, actualMinutesSpent);
   };
 
-  // FIXED: Function logic stays up here!
   const handleReset = () => {
     if (window.confirm("Are you sure you want to reset this timer to 0?")) {
       setIsRunning(false);
@@ -113,7 +134,6 @@ const ActiveTaskCard = ({ task, onComplete }) => {
             </div>
           </div>
 
-          {/* FIXED: The Reset button is now placed correctly next to the Audio button */}
           <div className="flex gap-2">
             <button 
               onClick={handleReset}
@@ -151,7 +171,9 @@ const ActiveTaskCard = ({ task, onComplete }) => {
           </button>
         </div>
 
+        {/* The Audio Elements */}
         <audio ref={audioRef} src="/audio.mp3" loop className="hidden" />
+        <audio ref={alarmRef} src="/alarm.mp3" className="hidden" />
 
       </div>
     </div>
