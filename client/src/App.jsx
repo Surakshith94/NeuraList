@@ -314,6 +314,78 @@ function App() {
     syncLayoutToStorage(activeTask, newOrderedTasks);
   };
 
+  // --- NEW: Aggressive Auto-Sync Logic ---
+  const handleSyncSchedule = () => {
+    if (!hasEveningStarted || queueTasks.length === 0 || !activeTask) return;
+
+    const now = new Date();
+    const bedtime = new Date();
+    bedtime.setHours(23, 0, 0, 0); 
+    if (now > bedtime) bedtime.setDate(bedtime.getDate() + 1);
+
+    const minutesUntilSleep = Math.floor((bedtime - now) / 60000);
+    
+    // Check real live time of active task
+    const activeSecondsSpent = parseInt(localStorage.getItem(`timer_${activeTask._id}`) || 0, 10);
+    const activeMinutesRemaining = Math.max(0, activeTask.estimatedMinutes - Math.floor(activeSecondsSpent / 60));
+    
+    // Calculate if we are literally out of time for the queue
+    let queueTimeRemaining = minutesUntilSleep - activeMinutesRemaining;
+    if (queueTimeRemaining <= 0) queueTimeRemaining = 0; 
+
+    const queueTotalTime = queueTasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+
+    // CRITICAL: Only squeeze if the scheduled tasks EXCEED the actual time left!
+    if (queueTotalTime <= queueTimeRemaining) return;
+
+    const highTasks = queueTasks.filter(t => t.priority === 'High');
+    const medTasks = queueTasks.filter(t => t.priority === 'Medium');
+    const lowTasks = queueTasks.filter(t => t.priority === 'Low');
+
+    let finalQueue = [];
+    
+    const processGroup = (group) => {
+      if (group.length === 0 || queueTimeRemaining <= 0) return;
+      const groupTotalTime = group.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+
+      if (groupTotalTime <= queueTimeRemaining) {
+        finalQueue.push(...group);
+        queueTimeRemaining -= groupTotalTime;
+      } else {
+        const ratio = queueTimeRemaining / groupTotalTime;
+        group.forEach(t => {
+          const squeezedTime = Math.max(5, Math.floor(t.estimatedMinutes * ratio)); 
+          finalQueue.push({
+            ...t,
+            estimatedMinutes: squeezedTime,
+            title: t.title.includes('Synced') ? t.title : `🔄 Synced: ${t.title}`
+          });
+        });
+        queueTimeRemaining = 0; 
+      }
+    };
+
+    processGroup(highTasks);
+    processGroup(medTasks);
+    processGroup(lowTasks);
+
+    setQueueTasks(finalQueue);
+    syncLayoutToStorage(activeTask, finalQueue);
+  };
+
+  // --- NEW: The Silent Background Auto-Sync Engine ---
+  useEffect(() => {
+    let autoSyncInterval;
+    
+    if (hasEveningStarted && queueTasks.length > 0) {
+      autoSyncInterval = setInterval(() => {
+        handleSyncSchedule();
+      }, 5000); 
+    }
+    
+    return () => clearInterval(autoSyncInterval);
+  }, [hasEveningStarted, queueTasks, activeTask]); 
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#0d0d12] text-white flex items-center justify-center font-sans">
