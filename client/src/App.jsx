@@ -437,9 +437,12 @@ function App() {
             <EveningTimeline activeTask={activeTask} queueTasks={queueTasks} />
 
             {activeTask ? (
-              <ActiveTaskCard task={activeTask} onComplete={handleComplete} />
+              {/* NEW: Added key={activeTask._id} to force a complete reset between tasks */}
+              <ActiveTaskCard key={activeTask._id} task={activeTask} onComplete={handleComplete} />
             ) : (
-              <div className="p-8 text-center border border-dashed border-white/20 rounded-2xl bg-white/5 mb-6"><p className="text-gray-400">No active tasks match your current mood. You are free!</p></div>
+              <div className="p-8 text-center border border-dashed border-white/20 rounded-2xl bg-white/5 mb-6">
+                <p className="text-gray-400">No active tasks match your current mood. You are free!</p>
+              </div>
             )}
 
             <TaskQueue tasks={queueTasks} onReorder={handleReorderQueue} />
