@@ -234,7 +234,25 @@ function App() {
     const overtime = timeSpent - activeTask.estimatedMinutes;
 
     if (overtime > 0) {
+      // 1. THE SMART BUFFER CHECK
+      // Check the real world clock before we panic.
+      const now = new Date();
+      const bedtime = new Date();
+      bedtime.setHours(23, 0, 0, 0); 
+      if (now > bedtime) bedtime.setDate(bedtime.getDate() + 1);
+      
+      const minutesUntilSleep = Math.floor((bedtime - now) / 60000);
+      const queueTotalTime = queueTasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+
+      // 2. If we still have enough time before bed to finish the queue, silently absorb it!
+      if (minutesUntilSleep >= queueTotalTime) {
+        finalizeTaskCompletion(taskId, timeSpent);
+        return; 
+      }
+
+      // 3. If we are genuinely out of time and going to miss 11:00 PM, trigger the modal.
       setActiveTask({ ...activeTask, timeSpent: timeSpent }); 
+      setPendingCompletionData({ taskId, timeSpent }); 
       setIsOvertimeModalOpen(true);
       return; 
     }
