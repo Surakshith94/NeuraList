@@ -50,19 +50,21 @@ const ActiveTaskCard = ({ task, onComplete }) => {
   }, [isRunning]); // ONLY re-runs when you hit play/pause
 
   // UPGRADE 2: The Alarm Trigger
+  // UPGRADE 2: The Recurring Alarm Trigger
   useEffect(() => {
     const targetSeconds = task.estimatedMinutes * 60;
     
-    // If the timer EXACTLY hits the target limit, ring the bell!
-    if (isRunning && secondsElapsed === targetSeconds) {
-      if (alarmRef.current) {
-        alarmRef.current.play().catch(e => console.error("Alarm blocked:", e));
+    // If we are running, AND we have reached or passed the target...
+    if (isRunning && secondsElapsed >= targetSeconds) {
+      // Ring exactly at the limit, AND every 60 seconds after that
+      if ((secondsElapsed - targetSeconds) % 60 === 0) {
+        if (alarmRef.current) {
+          alarmRef.current.currentTime = 0; // Reset audio to the beginning
+          alarmRef.current.play().catch(e => console.error("Alarm blocked:", e));
+        }
       }
-      
-      // Optional: Add a browser popup notification so it interrupts you in other tabs
-      // alert(`Time's up for: ${task.title}!`); 
     }
-  }, [secondsElapsed, isRunning, task.estimatedMinutes, task.title]);
+  }, [secondsElapsed, isRunning, task.estimatedMinutes]);
 
   const toggleTimer = () => {
     if (!hasStarted) setHasStarted(true);

@@ -182,9 +182,9 @@ function App() {
   // ------------------------------------------------------------------
   // THE NEW GLOBAL INTERCEPTOR ENGINE
   // ------------------------------------------------------------------
-  const finalizeTaskCompletion = async (taskId, timeSpent) => {
+  const finalizeTaskCompletion = async (taskId,timeSpent, customQueue= null) => {
     const undertime = activeTask.estimatedMinutes - timeSpent;
-    let updatedQueue = [...queueTasks];
+    let updatedQueue = customQueue !== null ? [...customQueue] : [...queueTasks];
     if (undertime > 0) updatedQueue = applyTimeBonus(updatedQueue, undertime);
 
     try {
@@ -240,6 +240,30 @@ function App() {
     }
     
     finalizeTaskCompletion(taskId, timeSpent);
+  };
+
+  const handleDropSelectedTask = async (taskIdToDrop) => {
+    setIsOvertimeModalOpen(false);
+    try {
+      // 1. Permanently delete the sacrificed task from the Database
+      await axios.delete(`http://localhost:5000/api/tasks/${taskIdToDrop}`);
+
+      // 2. Remove it from React State locally
+      setAllTasks(prev => prev.filter(t => t._id !== taskIdToDrop));
+      const newQueue = queueTasks.filter(t => t._id !== taskIdToDrop);
+      setQueueTasks(newQueue);
+
+      // 3. Mark the overtime task as complete, and pass the NEW queue to it!
+      finalizeTaskCompletion(activeTask._id, activeTask.timeSpent, newQueue);
+    } catch (err) {
+      console.error("Error dropping task:", err);
+    }
+  };
+
+  const handlePushBedtime = () => {
+    setIsOvertimeModalOpen(false);
+    // You decided to just stay up later! Complete the task normally without dropping anything.
+    finalizeTaskCompletion(activeTask._id, activeTask.timeSpent);
   };
 
   // --- Modal Button Handlers ---
@@ -437,9 +461,11 @@ function App() {
             <EveningTimeline activeTask={activeTask} queueTasks={queueTasks} />
 
             {activeTask ? (
-              <ActiveTaskCard task={activeTask} onComplete={handleComplete} />
+              <ActiveTaskCard  key={activeTask._id} task={activeTask} onComplete={handleComplete} />
             ) : (
-              <div className="p-8 text-center border border-dashed border-white/20 rounded-2xl bg-white/5 mb-6"><p className="text-gray-400">No active tasks match your current mood. You are free!</p></div>
+              <div className="p-8 text-center border border-dashed border-white/20 rounded-2xl bg-white/5 mb-6">
+                <p className="text-gray-400">No active tasks match your current mood. You are free!</p>
+              </div>
             )}
 
             <TaskQueue tasks={queueTasks} onReorder={handleReorderQueue} />
@@ -476,7 +502,14 @@ function App() {
         <RelaxSuggestionModal isOpen={isRelaxModalOpen} onAcceptRelax={handleAcceptRelax} onSkipRelax={handleKeepSchedule} />
         <BreakSuggestionModal isOpen={isBreakSuggestionOpen} onAcceptBreak={handleAcceptBreak} onSkipBreak={handleKeepSchedule} />
 
-        <OvertimeModal isOpen={isOvertimeModalOpen} taskTitle={activeTask?.title} overtimeMinutes={activeTask ? activeTask.timeSpent - activeTask.estimatedMinutes : 0} onDropTask={() => setIsOvertimeModalOpen(false)} onPushBedtime={() => setIsOvertimeModalOpen(false)} />
+       <OvertimeModal 
+          isOpen={isOvertimeModalOpen} 
+          taskTitle={activeTask?.title} 
+          overtimeMinutes={activeTask ? activeTask.timeSpent - activeTask.estimatedMinutes : 0} 
+          queueTasks={queueTasks}  
+          onDropTask={handleDropSelectedTask} 
+          onPushBedtime={handlePushBedtime}  
+        />
       </div>
     </div>
   );
