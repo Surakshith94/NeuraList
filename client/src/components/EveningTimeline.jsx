@@ -3,36 +3,41 @@ import React, { useState, useEffect } from 'react';
 const EveningTimeline = ({ activeTask, queueTasks }) => {
   const [liveSeconds, setLiveSeconds] = useState(0);
 
+  // Forcefully fetch the live timer from memory every single second
   useEffect(() => {
-    if (!activeTask) return;
+    if (!activeTask) {
+      setLiveSeconds(0);
+      return;
+    }
     
-    const initialVal = localStorage.getItem(`timer_${activeTask._id}`);
-    if (initialVal) setLiveSeconds(parseInt(initialVal, 10));
+    const fetchTime = () => {
+      const savedTime = localStorage.getItem(`timer_${activeTask._id}`);
+      setLiveSeconds(savedTime ? parseInt(savedTime, 10) : 0);
+    };
 
-    const interval = setInterval(() => {
-      const val = localStorage.getItem(`timer_${activeTask._id}`);
-      if (val) setLiveSeconds(parseInt(val, 10));
-    }, 1000);
-
+    fetchTime(); // Initial grab
+    const interval = setInterval(fetchTime, 1000); // 1-second heartbeat
+    
     return () => clearInterval(interval);
   }, [activeTask]);
 
   if (!activeTask) return null;
 
-  // 1. Calculate EXACT remaining time for the active task down to the second
+  // 1. Calculate EXACT remaining time down to the second
   const activeSecondsRemaining = Math.max(0, (activeTask.estimatedMinutes * 60) - liveSeconds);
-  const activeMinutesRemaining = Math.max(0, activeTask.estimatedMinutes - Math.floor(liveSeconds / 60));
+  const activeMinutesRemaining = Math.floor(activeSecondsRemaining / 60);
   
-  // 2. Calculate the exact remaining queue time
+  // 2. Add the queue time
   const queueSeconds = queueTasks.reduce((acc, t) => acc + (t.estimatedMinutes * 60), 0);
   const totalSecondsRemaining = activeSecondsRemaining + queueSeconds;
 
-  // Format the total time so it physically ticks down every second
+  // 3. Format for the ticking badge
   const displayTotalMins = Math.floor(totalSecondsRemaining / 60);
   const displayTotalSecs = (totalSecondsRemaining % 60).toString().padStart(2, '0');
 
+  // 4. Calculate display widths
   const displayTasks = [
-    { ...activeTask, displayMins: activeMinutesRemaining },
+    { ...activeTask, displayMins: Math.max(1, activeMinutesRemaining) }, // Max 1 ensures the block doesn't completely disappear while active
     ...queueTasks.map(t => ({ ...t, displayMins: t.estimatedMinutes }))
   ];
   const totalOriginalMinutes = displayTasks.reduce((acc, t) => acc + t.displayMins, 0);
@@ -43,7 +48,6 @@ const EveningTimeline = ({ activeTask, queueTasks }) => {
         <h3 className="font-bold text-white flex items-center gap-2">
           <span>⏱️</span> Live Nightly Split
         </h3>
-        {/* NEW: The label now physically ticks down every single second! */}
         <span className="text-sm font-mono font-bold text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.2)]">
           {displayTotalMins}m {displayTotalSecs}s of work left
         </span>

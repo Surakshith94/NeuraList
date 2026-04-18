@@ -408,6 +408,28 @@ function App() {
             )}
 
             <TaskQueue tasks={queueTasks} onReorder={handleReorderQueue} />
+            {/* NEW: Completed Tasks show up immediately at the bottom of the active page! */}
+            {allTasks.filter(t => t.status === 'completed').length > 0 && (
+              <div className="mt-12 border-t border-white/10 pt-8">
+                <h3 className="text-xl font-bold mb-4 text-white flex items-center gap-2 opacity-50">
+                  <span>✅</span> Completed Tonight
+                </h3>
+                <div className="flex flex-col gap-3 opacity-60 hover:opacity-100 transition-opacity">
+                  {allTasks.filter(t => t.status === 'completed').map((task) => (
+                    <div key={task._id} className="flex items-center justify-between p-4 rounded-2xl bg-green-500/5 border border-green-500/10">
+                      <h4 className="font-semibold text-gray-400 line-through">{task.title}</h4>
+                      <button 
+                        onClick={() => handleRestoreTask(task._id)} 
+                        className="text-gray-500 hover:text-green-400 hover:bg-green-500/10 px-3 py-2 rounded-lg transition-colors cursor-pointer text-sm font-bold"
+                      >
+                        ↩️ Undo
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* END OF NEW SECTION */}
           </>
         )}
 
