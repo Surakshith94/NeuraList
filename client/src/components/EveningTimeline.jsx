@@ -19,15 +19,23 @@ const EveningTimeline = ({ activeTask, queueTasks }) => {
 
   if (!activeTask) return null;
 
-  const allEveningTasks = [activeTask, ...queueTasks];
-  
-  // This is used to draw the physical widths of the color blocks
-  const totalOriginalMinutes = allEveningTasks.reduce((acc, t) => acc + t.estimatedMinutes, 0);
-
-  // NEW: This calculates the ACTUAL time left to display in the UI text
+  // 1. Calculate EXACT remaining time for the active task down to the second
+  const activeSecondsRemaining = Math.max(0, (activeTask.estimatedMinutes * 60) - liveSeconds);
   const activeMinutesRemaining = Math.max(0, activeTask.estimatedMinutes - Math.floor(liveSeconds / 60));
-  const queueMinutes = queueTasks.reduce((acc, t) => acc + t.estimatedMinutes, 0);
-  const actualRemainingWork = activeMinutesRemaining + queueMinutes;
+  
+  // 2. Calculate the exact remaining queue time
+  const queueSeconds = queueTasks.reduce((acc, t) => acc + (t.estimatedMinutes * 60), 0);
+  const totalSecondsRemaining = activeSecondsRemaining + queueSeconds;
+
+  // Format the total time so it physically ticks down every second
+  const displayTotalMins = Math.floor(totalSecondsRemaining / 60);
+  const displayTotalSecs = (totalSecondsRemaining % 60).toString().padStart(2, '0');
+
+  const displayTasks = [
+    { ...activeTask, displayMins: activeMinutesRemaining },
+    ...queueTasks.map(t => ({ ...t, displayMins: t.estimatedMinutes }))
+  ];
+  const totalOriginalMinutes = displayTasks.reduce((acc, t) => acc + t.displayMins, 0);
 
   return (
     <div className="mb-8 bg-white/5 border border-white/10 rounded-[24px] p-5 shadow-lg">
@@ -35,41 +43,35 @@ const EveningTimeline = ({ activeTask, queueTasks }) => {
         <h3 className="font-bold text-white flex items-center gap-2">
           <span>⏱️</span> Live Nightly Split
         </h3>
-        {/* NEW: The label now perfectly matches reality */}
-        <span className="text-sm font-mono font-bold text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
-          {actualRemainingWork} mins of work left
+        {/* NEW: The label now physically ticks down every single second! */}
+        <span className="text-sm font-mono font-bold text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.2)]">
+          {displayTotalMins}m {displayTotalSecs}s of work left
         </span>
       </div>
 
-      <div className="flex w-full h-14 rounded-xl overflow-hidden shadow-inner gap-1 bg-[#0d0d12] border border-white/5 p-1">
-        {allEveningTasks.map((task, index) => {
-          const widthPct = (task.estimatedMinutes / totalOriginalMinutes) * 100;
+      <div className="flex w-full h-14 rounded-xl overflow-hidden shadow-inner gap-1 bg-[#0d0d12] border border-white/5 p-1 transition-all duration-1000">
+        {displayTasks.map((task, index) => {
+          if (task.displayMins <= 0) return null;
+
+          const widthPct = (task.displayMins / totalOriginalMinutes) * 100;
           const isActive = index === 0;
-          const taskTotalSeconds = task.estimatedMinutes * 60;
-          const progressPct = isActive ? Math.min((liveSeconds / taskTotalSeconds) * 100, 100) : 0;
 
           return (
             <div
               key={task._id + index}
               style={{ width: `${widthPct}%` }}
-              title={`${task.title} (${task.estimatedMinutes}m)`}
-              className={`h-full rounded-lg relative group transition-all duration-300 overflow-hidden ${
+              title={`${task.title} (${task.displayMins}m)`}
+              className={`h-full rounded-lg relative group transition-all duration-1000 overflow-hidden flex items-center justify-center ${
                 isActive
-                  ? 'bg-blue-900/40 shadow-[0_0_15px_rgba(37,99,235,0.4)] border border-blue-500/50' 
+                  ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.6)] border border-blue-400/50' 
                   : task.priority === 'High' ? 'bg-red-500/80' 
                   : task.priority === 'Medium' ? 'bg-yellow-500/80' 
                   : 'bg-gray-500/50'
               }`}
             >
-              {isActive && (
-                <div 
-                  className="absolute top-0 left-0 h-full bg-blue-500 transition-all duration-1000 ease-linear"
-                  style={{ width: `${progressPct}%` }}
-                />
-              )}
-              {widthPct > 12 && (
-                <span className="absolute inset-0 flex items-center justify-center text-[12px] font-extrabold text-white drop-shadow-md z-10">
-                  {task.estimatedMinutes}m
+              {widthPct > 8 && (
+                <span className="text-[12px] font-extrabold text-white drop-shadow-md z-10">
+                  {task.displayMins}m
                 </span>
               )}
             </div>

@@ -11,8 +11,10 @@ import { applyEnergyWave, applyTimeBonus } from './utils/algorithm';
 import MasterTaskList from './components/MasterTaskList'; 
 import ProjectSummary from './components/ProjectSummary'; 
 import ConsistencyHeatmap from './components/ConsistencyHeatmap';
-import EveningTimeline from './components/ProgressBar';
+import EveningTimeline from './components/EveningTimeline';
 import RechargeCheckModal from './components/RechargeCheckModal';
+import BreakSuggestionModal from './components/BreakSuggestionModal'; 
+import RelaxSuggestionModal from './components/RelaxSuggestionModal'; 
 
 function App() {
   const [allTasks, setAllTasks] = useState([]); 
@@ -26,100 +28,83 @@ function App() {
   const [isMoodModalOpen, setIsMoodModalOpen] = useState(false);
   const [isOvertimeModalOpen, setIsOvertimeModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState(null);
 
-  // Recharge Modal State
+  // Interceptor Modals
+  const [isBreakSuggestionOpen, setIsBreakSuggestionOpen] = useState(false);
+  const [isRelaxModalOpen, setIsRelaxModalOpen] = useState(false);
   const [isRechargeModalOpen, setIsRechargeModalOpen] = useState(false);
-  const [pendingCompletionData, setPendingCompletionData] = useState(null);
+  const [pendingNextTaskData, setPendingNextTaskData] = useState(null);
 
   const syncLayoutToStorage = (active, queue) => {
     if (active) localStorage.setItem('activeTaskId', active._id);
     else localStorage.removeItem('activeTaskId');
-    
     if (queue) localStorage.setItem('queueTaskIds', JSON.stringify(queue.map(t => t._id)));
   };
 
   const processAndQueueTasks = (mood, rawTasks) => {
     let processedTasks = rawTasks.filter(task => task.status !== 'completed');
 
-    // 1. FILTERING: High Priority tasks NEVER get deleted, regardless of mood.
-    processedTasks = processedTasks.filter(task => {
-      if (task.priority === 'High') return true; 
-
-      if (mood === 'Burned Out') return task.energyLevel === 'Recharge';
-      if (mood === 'Neutral') return task.energyLevel !== 'High Focus';
-      
-      return true; 
-    });
-
-    // 2. MICRO-SPRINTS
     processedTasks = processedTasks.map(task => {
       if (task.priority === 'High') {
         if (mood === 'Burned Out' && task.energyLevel !== 'Recharge') {
-          return { ...task, estimatedMinutes: Math.min(task.estimatedMinutes, 10), title: `🚨 Micro-Sprint: ${task.title}` };
+          return { ...task, estimatedMinutes: Math.min(task.estimatedMinutes, 10), title: task.title.includes('Sprint') ? task.title : `🚨 Micro-Sprint: ${task.title}` };
         } else if (mood === 'Neutral' && task.energyLevel === 'High Focus') {
-          return { ...task, estimatedMinutes: Math.min(task.estimatedMinutes, 15), title: `🚨 Sprint: ${task.title}` };
+          return { ...task, estimatedMinutes: Math.min(task.estimatedMinutes, 15), title: task.title.includes('Sprint') ? task.title : `🚨 Sprint: ${task.title}` };
         }
       }
       return task;
     });
 
-    // 3. Optional: Apply Energy Wave for long tasks if you feel okay
-    if (mood !== 'Burned Out') {
-      processedTasks = applyEnergyWave(processedTasks);
-    }
-
-    // 4. Calculate Time Until Bedtime
     const now = new Date();
     const bedtime = new Date();
     bedtime.setHours(23, 0, 0, 0); 
     if (now > bedtime) bedtime.setDate(bedtime.getDate() + 1);
-
     let minutesUntilSleep = Math.floor((bedtime - now) / 60000);
-    if (minutesUntilSleep <= 0) minutesUntilSleep = 60; 
+    if (minutesUntilSleep <= 0) minutesUntilSleep = 60;
 
-    // 5. Group by Priority
     const highTasks = processedTasks.filter(t => t.priority === 'High');
     const medTasks = processedTasks.filter(t => t.priority === 'Medium');
     const lowTasks = processedTasks.filter(t => t.priority === 'Low');
 
-    let finalQueue = [];
-    let timeRemaining = minutesUntilSleep;
-
-    // 6. Proportional Squeezing
-    const processGroup = (group) => {
-      if (group.length === 0 || timeRemaining <= 0) return;
-
-      const groupTotalTime = group.reduce((sum, t) => sum + t.estimatedMinutes, 0);
-
-      if (groupTotalTime <= timeRemaining) {
-        finalQueue.push(...group);
-        timeRemaining -= groupTotalTime;
+    let orderedTasks = [];
+    if (mood === 'Energized') {
+      orderedTasks = [...highTasks, ...medTasks, ...lowTasks]; 
+    } else if (mood === 'Neutral') {
+      orderedTasks = [...highTasks, ...medTasks, ...lowTasks]; 
+    } else { 
+      if (minutesUntilSleep > 120) {
+        orderedTasks = [...lowTasks, ...highTasks, ...medTasks]; 
       } else {
-        const ratio = timeRemaining / groupTotalTime;
-        group.forEach(t => {
-          const squeezedTime = Math.max(5, Math.floor(t.estimatedMinutes * ratio)); 
-          finalQueue.push({
-            ...t,
-            estimatedMinutes: squeezedTime,
-            title: t.title.includes('Sprint') ? t.title : `⏱️ Squeezed: ${t.title}`
-          });
-        });
-        timeRemaining = 0; 
+        orderedTasks = [...highTasks, ...lowTasks, ...medTasks]; 
       }
-    };
+    }
 
-    processGroup(highTasks);
-    processGroup(medTasks);
-    processGroup(lowTasks);
+    let finalQueue = [];
+    const totalQueueTime = orderedTasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
 
-    // 7. Update the UI
+    if (totalQueueTime > minutesUntilSleep) {
+      const ratio = minutesUntilSleep / totalQueueTime;
+      orderedTasks.forEach(t => {
+        const squeezedTime = Math.max(5, Math.floor(t.estimatedMinutes * ratio));
+        finalQueue.push({ ...t, estimatedMinutes: squeezedTime, title: t.title.includes('Squeezed') ? t.title : `⏱️ Squeezed: ${t.title}` });
+      });
+    } else if (totalQueueTime > 0 && totalQueueTime < minutesUntilSleep) {
+      const ratio = minutesUntilSleep / totalQueueTime;
+      const safeRatio = Math.min(ratio, 1.5); 
+      orderedTasks.forEach(t => {
+        const stretchedTime = Math.floor(t.estimatedMinutes * safeRatio);
+        finalQueue.push({ ...t, estimatedMinutes: stretchedTime, title: t.title.includes('Expanded') ? t.title : `🧘 Expanded: ${t.title}` });
+      });
+    } else {
+      finalQueue = orderedTasks;
+    }
+
     if (finalQueue.length > 0) {
       setActiveTask(finalQueue[0]);
       setQueueTasks(finalQueue.slice(1));
-      syncLayoutToStorage(finalQueue[0], finalQueue.slice(1)); 
+      syncLayoutToStorage(finalQueue[0], finalQueue.slice(1));
     } else {
       setActiveTask(null);
       setQueueTasks([]);
@@ -132,11 +117,9 @@ function App() {
       try {
         const response = await axios.get('http://localhost:5000/api/tasks');
         setAllTasks(response.data);
-        
         if (localStorage.getItem('hasEveningStarted') === 'true') {
           const savedActiveId = localStorage.getItem('activeTaskId');
           const savedQueueIds = JSON.parse(localStorage.getItem('queueTaskIds') || '[]');
-
           const hydratedActive = response.data.find(t => t._id === savedActiveId) || null;
           const hydratedQueue = savedQueueIds.map(id => response.data.find(t => t._id === id)).filter(Boolean);
 
@@ -144,8 +127,7 @@ function App() {
             setActiveTask(hydratedActive);
             setQueueTasks(hydratedQueue);
           } else {
-            const savedMood = localStorage.getItem('currentMood');
-            processAndQueueTasks(savedMood, response.data);
+            processAndQueueTasks(localStorage.getItem('currentMood'), response.data);
           }
         }
         setIsLoading(false);
@@ -171,55 +153,35 @@ function App() {
     setCurrentMood(null);
     setActiveTask(null);
     setQueueTasks([]);
-    
-    localStorage.removeItem('hasEveningStarted');
-    localStorage.removeItem('currentMood');
-    localStorage.removeItem('activeTaskId');
-    localStorage.removeItem('queueTaskIds');
+    localStorage.clear();
   };
 
   const handleTaskAdded = (newTask) => {
     setAllTasks([...allTasks, newTask]);
-    if (hasEveningStarted) {
-      const wavedNewTasks = applyEnergyWave([newTask]);
-      if (!activeTask) {
-        setActiveTask(wavedNewTasks[0]);
-        setQueueTasks(wavedNewTasks.slice(1));
-        syncLayoutToStorage(wavedNewTasks[0], wavedNewTasks.slice(1));
-      } else {
-        const newQueue = [...queueTasks, ...wavedNewTasks];
-        setQueueTasks(newQueue);
-        syncLayoutToStorage(activeTask, newQueue);
-      }
-    }
+    if (hasEveningStarted) processAndQueueTasks(currentMood, [...allTasks, newTask]);
   };
 
-  const openEditModal = (task) => {
-    setTaskToEdit(task);
-    setIsEditModalOpen(true);
-  };
+  const openEditModal = (task) => { setTaskToEdit(task); setIsEditModalOpen(true); };
 
   const handleTaskUpdated = (updatedTask) => {
     const updatedAllTasks = allTasks.map(t => t._id === updatedTask._id ? updatedTask : t);
     setAllTasks(updatedAllTasks);
-
     if (activeTask && activeTask._id === updatedTask._id) {
       setActiveTask(updatedTask);
       syncLayoutToStorage(updatedTask, queueTasks);
     }
-
     const updatedQueue = queueTasks.map(t => t._id === updatedTask._id ? updatedTask : t);
     setQueueTasks(updatedQueue);
     syncLayoutToStorage(activeTask, updatedQueue);
   };
 
+  // ------------------------------------------------------------------
+  // THE NEW GLOBAL INTERCEPTOR ENGINE
+  // ------------------------------------------------------------------
   const finalizeTaskCompletion = async (taskId, timeSpent) => {
     const undertime = activeTask.estimatedMinutes - timeSpent;
     let updatedQueue = [...queueTasks];
-
-    if (undertime > 0) {
-      updatedQueue = applyTimeBonus(updatedQueue, undertime);
-    }
+    if (undertime > 0) updatedQueue = applyTimeBonus(updatedQueue, undertime);
 
     try {
       if (!activeTask.isSystemGenerated) {
@@ -228,9 +190,31 @@ function App() {
       }
 
       if (updatedQueue.length > 0) {
-        setActiveTask(updatedQueue[0]);
+        const nextTask = updatedQueue[0];
+        
+        // INTERCEPTOR 1: After a Break -> Offer a High Priority Task
+        if (activeTask.energyLevel === 'Recharge' && !activeTask.isSystemGenerated) {
+          const hasHighPri = updatedQueue.some(t => t.priority === 'High');
+          if (hasHighPri && nextTask.priority !== 'High') {
+            setPendingNextTaskData({ nextTask, updatedQueue });
+            setIsRechargeModalOpen(true);
+            return;
+          }
+        }
+
+        // INTERCEPTOR 2: After Work -> Offer a Low Priority Task to Relax (Across ALL moods)
+        if (activeTask.energyLevel !== 'Recharge' && !activeTask.isSystemGenerated) {
+          const hasLowPri = updatedQueue.some(t => t.priority === 'Low');
+          if (hasLowPri && nextTask.priority !== 'Low') {
+            setPendingNextTaskData({ nextTask, updatedQueue });
+            setIsRelaxModalOpen(true);
+            return;
+          }
+        }
+
+        setActiveTask(nextTask);
         setQueueTasks(updatedQueue.slice(1));
-        syncLayoutToStorage(updatedQueue[0], updatedQueue.slice(1)); 
+        syncLayoutToStorage(nextTask, updatedQueue.slice(1)); 
       } else {
         setActiveTask(null);
         setQueueTasks([]);
@@ -250,63 +234,79 @@ function App() {
       setIsOvertimeModalOpen(true);
       return; 
     }
-
-    if (activeTask.energyLevel === 'Recharge' && currentMood !== 'Energized') {
-      setPendingCompletionData({ taskId, timeSpent });
-      setIsRechargeModalOpen(true);
-      return;
-    }
-
+    
     finalizeTaskCompletion(taskId, timeSpent);
   };
 
-  const handleLevelUpMood = () => {
+  // --- Modal Button Handlers ---
+  const handlePullHighTask = () => {
     setIsRechargeModalOpen(false);
-    const newMood = currentMood === 'Burned Out' ? 'Neutral' : 'Energized';
-    setCurrentMood(newMood);
-    localStorage.setItem('currentMood', newMood);
+    const { updatedQueue } = pendingNextTaskData;
+    const highIndex = updatedQueue.findIndex(t => t.priority === 'High');
+    const highTask = updatedQueue[highIndex];
     
-    finalizeTaskCompletion(pendingCompletionData.taskId, pendingCompletionData.timeSpent).then(() => {
-      processAndQueueTasks(newMood, allTasks);
-    });
+    const newQueue = [...updatedQueue];
+    newQueue.splice(highIndex, 1);
+
+    setActiveTask(highTask);
+    setQueueTasks(newQueue);
+    syncLayoutToStorage(highTask, newQueue);
   };
 
-  const handleStayRelaxed = () => {
+  const handleAcceptRelax = () => {
+    setIsRelaxModalOpen(false);
+    const { updatedQueue } = pendingNextTaskData;
+    const lowIndex = updatedQueue.findIndex(t => t.priority === 'Low');
+    const lowTask = updatedQueue[lowIndex];
+
+    const newQueue = [...updatedQueue];
+    newQueue.splice(lowIndex, 1);
+
+    setActiveTask(lowTask);
+    setQueueTasks(newQueue);
+    syncLayoutToStorage(lowTask, newQueue);
+  };
+
+  const handleKeepSchedule = () => {
     setIsRechargeModalOpen(false);
-    finalizeTaskCompletion(pendingCompletionData.taskId, pendingCompletionData.timeSpent);
+    setIsRelaxModalOpen(false);
+    setIsBreakSuggestionOpen(false);
+    setActiveTask(pendingNextTaskData.nextTask);
+    setQueueTasks(pendingNextTaskData.updatedQueue.slice(1));
+    syncLayoutToStorage(pendingNextTaskData.nextTask, pendingNextTaskData.updatedQueue.slice(1));
+  };
+
+  // Phantom Break task logic
+  const handleAcceptBreak = () => {
+    setIsBreakSuggestionOpen(false);
+    const breakTask = {
+      _id: `sys_break_${Date.now()}`,
+      title: '☕ Quick Recharge',
+      estimatedMinutes: 10,
+      energyLevel: 'Recharge',
+      priority: 'Low',
+      project: 'Wellness',
+      isSystemGenerated: true
+    };
+    setActiveTask(breakTask);
+    setQueueTasks(pendingNextTaskData.updatedQueue); 
+    syncLayoutToStorage(breakTask, pendingNextTaskData.updatedQueue);
   };
 
   const handleRestoreTask = async (taskId) => {
     try {
-      // 1. Tell the backend to un-archive it and reset the time spent to 0
-      await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { 
-        status: 'Pending', 
-        completedAt: null,
-        timeSpent: 0 
-      });
-
-      // 2. Update the React State locally
-      const updatedTasks = allTasks.map(t => 
-        t._id === taskId ? { ...t, status: 'Pending', completedAt: null, timeSpent: 0 } : t
-      );
+      await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { status: 'Pending', completedAt: null, timeSpent: 0 });
+      const updatedTasks = allTasks.map(t => t._id === taskId ? { ...t, status: 'Pending', completedAt: null, timeSpent: 0 } : t);
       setAllTasks(updatedTasks);
-
-      // 3. If the evening is currently running, push it right back into the algorithm!
-      if (hasEveningStarted) {
-        processAndQueueTasks(currentMood, updatedTasks);
-      }
-    } catch (error) {
-      console.error("Error restoring task:", error);
-    }
+      if (hasEveningStarted) processAndQueueTasks(currentMood, updatedTasks);
+    } catch (error) { console.error(error); }
   };
 
   const handleDeleteTask = async (taskId) => {
     try {
       await axios.delete(`http://localhost:5000/api/tasks/${taskId}`);
       setAllTasks(allTasks.filter(task => task._id !== taskId));
-    } catch (error) {
-      console.error(error);
-    }
+    } catch (error) { console.error(error); }
   };
 
   const handleReorderQueue = (newOrderedTasks) => {
@@ -314,40 +314,31 @@ function App() {
     syncLayoutToStorage(activeTask, newOrderedTasks);
   };
 
-  // --- NEW: Aggressive Auto-Sync Logic ---
+  // --- Background Auto-Sync ---
   const handleSyncSchedule = () => {
     if (!hasEveningStarted || queueTasks.length === 0 || !activeTask) return;
-
     const now = new Date();
     const bedtime = new Date();
     bedtime.setHours(23, 0, 0, 0); 
     if (now > bedtime) bedtime.setDate(bedtime.getDate() + 1);
-
     const minutesUntilSleep = Math.floor((bedtime - now) / 60000);
-    
-    // Check real live time of active task
     const activeSecondsSpent = parseInt(localStorage.getItem(`timer_${activeTask._id}`) || 0, 10);
     const activeMinutesRemaining = Math.max(0, activeTask.estimatedMinutes - Math.floor(activeSecondsSpent / 60));
     
-    // Calculate if we are literally out of time for the queue
     let queueTimeRemaining = minutesUntilSleep - activeMinutesRemaining;
     if (queueTimeRemaining <= 0) queueTimeRemaining = 0; 
 
     const queueTotalTime = queueTasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
-
-    // CRITICAL: Only squeeze if the scheduled tasks EXCEED the actual time left!
-    if (queueTotalTime <= queueTimeRemaining) return;
+    if (queueTotalTime <= queueTimeRemaining) return; 
 
     const highTasks = queueTasks.filter(t => t.priority === 'High');
     const medTasks = queueTasks.filter(t => t.priority === 'Medium');
     const lowTasks = queueTasks.filter(t => t.priority === 'Low');
 
     let finalQueue = [];
-    
     const processGroup = (group) => {
       if (group.length === 0 || queueTimeRemaining <= 0) return;
       const groupTotalTime = group.reduce((sum, t) => sum + t.estimatedMinutes, 0);
-
       if (groupTotalTime <= queueTimeRemaining) {
         finalQueue.push(...group);
         queueTimeRemaining -= groupTotalTime;
@@ -355,11 +346,7 @@ function App() {
         const ratio = queueTimeRemaining / groupTotalTime;
         group.forEach(t => {
           const squeezedTime = Math.max(5, Math.floor(t.estimatedMinutes * ratio)); 
-          finalQueue.push({
-            ...t,
-            estimatedMinutes: squeezedTime,
-            title: t.title.includes('Synced') ? t.title : `🔄 Synced: ${t.title}`
-          });
+          finalQueue.push({ ...t, estimatedMinutes: squeezedTime, title: t.title.includes('Synced') ? t.title : `🔄 Synced: ${t.title}` });
         });
         queueTimeRemaining = 0; 
       }
@@ -368,31 +355,19 @@ function App() {
     processGroup(highTasks);
     processGroup(medTasks);
     processGroup(lowTasks);
-
     setQueueTasks(finalQueue);
     syncLayoutToStorage(activeTask, finalQueue);
   };
 
-  // --- NEW: The Silent Background Auto-Sync Engine ---
   useEffect(() => {
     let autoSyncInterval;
-    
     if (hasEveningStarted && queueTasks.length > 0) {
-      autoSyncInterval = setInterval(() => {
-        handleSyncSchedule();
-      }, 5000); 
+      autoSyncInterval = setInterval(() => { handleSyncSchedule(); }, 5000); 
     }
-    
     return () => clearInterval(autoSyncInterval);
   }, [hasEveningStarted, queueTasks, activeTask]); 
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#0d0d12] text-white flex items-center justify-center font-sans">
-        <p className="text-xl text-gray-400 animate-pulse">Syncing with database...</p>
-      </div>
-    );
-  }
+  if (isLoading) return <div className="min-h-screen bg-[#0d0d12] text-white flex items-center justify-center"><p className="animate-pulse">Syncing...</p></div>;
 
   return (
     <div className="min-h-screen bg-[#0d0d12] text-white p-6 md:p-12 font-sans selection:bg-green-500/30">
@@ -412,13 +387,7 @@ function App() {
             <button onClick={() => setIsMoodModalOpen(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-bold text-lg transition-all shadow-lg shadow-blue-500/20 cursor-pointer border border-blue-400/50 mb-6">Start My Evening</button>
             <ConsistencyHeatmap tasks={allTasks} />
             <ProjectSummary tasks={allTasks.filter(t => t.status !== 'completed')} />
-            
-            <MasterTaskList 
-              tasks={allTasks} 
-              onDelete={handleDeleteTask} 
-              onEdit={openEditModal} 
-              onRestore={handleRestoreTask}
-            />
+            <MasterTaskList tasks={allTasks} onDelete={handleDeleteTask} onEdit={openEditModal} onRestore={handleRestoreTask} />
           </div>
         ) : (
           <>
@@ -435,9 +404,7 @@ function App() {
             {activeTask ? (
               <ActiveTaskCard task={activeTask} onComplete={handleComplete} />
             ) : (
-              <div className="p-8 text-center border border-dashed border-white/20 rounded-2xl bg-white/5 mb-6">
-                <p className="text-gray-400">No active tasks match your current mood. You are free!</p>
-              </div>
+              <div className="p-8 text-center border border-dashed border-white/20 rounded-2xl bg-white/5 mb-6"><p className="text-gray-400">No active tasks match your current mood. You are free!</p></div>
             )}
 
             <TaskQueue tasks={queueTasks} onReorder={handleReorderQueue} />
@@ -446,19 +413,11 @@ function App() {
 
         <MoodSelectorModal isOpen={isMoodModalOpen} onSelectMood={applyMoodAndStart} onClose={() => setIsMoodModalOpen(false)} />
         <AddTaskModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onTaskAdded={handleTaskAdded} />
+        <EditTaskModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} taskToEdit={taskToEdit} onTaskUpdated={handleTaskUpdated} />
         
-        <EditTaskModal 
-          isOpen={isEditModalOpen} 
-          onClose={() => setIsEditModalOpen(false)} 
-          taskToEdit={taskToEdit} 
-          onTaskUpdated={handleTaskUpdated} 
-        />
-
-        <RechargeCheckModal 
-          isOpen={isRechargeModalOpen} 
-          onLevelUp={handleLevelUpMood} 
-          onStayRelaxed={handleStayRelaxed} 
-        />
+        <RechargeCheckModal isOpen={isRechargeModalOpen} onPullHighTask={handlePullHighTask} onKeepSchedule={handleKeepSchedule} />
+        <RelaxSuggestionModal isOpen={isRelaxModalOpen} onAcceptRelax={handleAcceptRelax} onSkipRelax={handleKeepSchedule} />
+        <BreakSuggestionModal isOpen={isBreakSuggestionOpen} onAcceptBreak={handleAcceptBreak} onSkipBreak={handleKeepSchedule} />
 
         <OvertimeModal isOpen={isOvertimeModalOpen} taskTitle={activeTask?.title} overtimeMinutes={activeTask ? activeTask.timeSpent - activeTask.estimatedMinutes : 0} onDropTask={() => setIsOvertimeModalOpen(false)} onPushBedtime={() => setIsOvertimeModalOpen(false)} />
       </div>
