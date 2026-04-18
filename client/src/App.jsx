@@ -299,9 +299,40 @@ function App() {
 
   const handleRestoreTask = async (taskId) => {
     try {
-      await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { status: 'Pending', completedAt: null, timeSpent: 0 });
-      const updatedTasks = allTasks.map(t => t._id === taskId ? { ...t, status: 'Pending', completedAt: null, timeSpent: 0 } : t);
+      // 1. Find the task we are trying to restore
+      const taskToRestore = allTasks.find(t => t._id === taskId);
+      
+      // 2. THE MIDNIGHT CHECK: Did they finish this today, or yesterday?
+      let preservedTime = 0;
+      if (taskToRestore.completedAt) {
+        const completedDate = new Date(taskToRestore.completedAt);
+        const today = new Date();
+        
+        // If the date string matches exactly, it happened today. Keep the time!
+        if (completedDate.toDateString() === today.toDateString()) {
+          preservedTime = taskToRestore.timeSpent || 0;
+        }
+      }
+
+      // 3. Un-archive it in the DB
+      await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { 
+        status: 'Pending', 
+        completedAt: null 
+      });
+
+      // 4. Set the browser memory based on the Midnight Check
+      if (preservedTime > 0) {
+        localStorage.setItem(`timer_${taskId}`, preservedTime * 60);
+      } else {
+        localStorage.removeItem(`timer_${taskId}`); // Wipe it clean for a new day
+      }
+
+      // 5. Update React State
+      const updatedTasks = allTasks.map(t => 
+        t._id === taskId ? { ...t, status: 'Pending', completedAt: null, timeSpent: preservedTime } : t
+      );
       setAllTasks(updatedTasks);
+      
       if (hasEveningStarted) processAndQueueTasks(currentMood, updatedTasks);
     } catch (error) { console.error(error); }
   };
