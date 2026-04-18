@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 
 const EveningTimeline = ({ activeTask, queueTasks }) => {
   const [liveSeconds, setLiveSeconds] = useState(0);
+  const [currentTick, setCurrentTick] = useState(Date.now()); // NEW: Live System Clock
 
-  // Forcefully fetch the live timer from memory every single second
+  // Forcefully fetch the live timer AND the OS clock every single second
   useEffect(() => {
     if (!activeTask) {
       setLiveSeconds(0);
@@ -15,29 +16,41 @@ const EveningTimeline = ({ activeTask, queueTasks }) => {
       setLiveSeconds(savedTime ? parseInt(savedTime, 10) : 0);
     };
 
-    fetchTime(); // Initial grab
-    const interval = setInterval(fetchTime, 1000); // 1-second heartbeat
+    fetchTime(); 
+    const interval = setInterval(() => {
+      fetchTime();
+      setCurrentTick(Date.now()); // Ticks every second flawlessly
+    }, 1000); 
     
     return () => clearInterval(interval);
   }, [activeTask]);
 
   if (!activeTask) return null;
 
-  // 1. Calculate EXACT remaining time down to the second
+  // 1. Calculate the Hard Bedtime Limit down to the second
+  const bedtime = new Date();
+  bedtime.setHours(23, 0, 0, 0);
+  if (currentTick > bedtime.getTime()) bedtime.setDate(bedtime.getDate() + 1);
+  const secondsUntilSleep = Math.max(0, Math.floor((bedtime.getTime() - currentTick) / 1000));
+
+  // 2. Calculate the Actual Planned Work Time
   const activeSecondsRemaining = Math.max(0, (activeTask.estimatedMinutes * 60) - liveSeconds);
-  const activeMinutesRemaining = Math.floor(activeSecondsRemaining / 60);
-  
-  // 2. Add the queue time
   const queueSeconds = queueTasks.reduce((acc, t) => acc + (t.estimatedMinutes * 60), 0);
-  const totalSecondsRemaining = activeSecondsRemaining + queueSeconds;
+  const actualPlannedSeconds = activeSecondsRemaining + queueSeconds;
 
-  // 3. Format for the ticking badge
-  const displayTotalMins = Math.floor(totalSecondsRemaining / 60);
-  const displayTotalSecs = (totalSecondsRemaining % 60).toString().padStart(2, '0');
+  // 3. THE MAGIC FIX: Smooth Real-Time Drain
+  // If you pause the timer and procrastinate, actualPlannedSeconds freezes.
+  // BUT secondsUntilSleep keeps ticking down. By taking the minimum of the two,
+  // the UI seamlessly drains your lost time second-by-second with ZERO lag.
+  const displaySeconds = Math.min(actualPlannedSeconds, secondsUntilSleep);
 
-  // 4. Calculate display widths
+  const displayTotalMins = Math.floor(displaySeconds / 60);
+  const displayTotalSecs = (displaySeconds % 60).toString().padStart(2, '0');
+
+  // Calculate display widths for the colored blocks
+  const activeMinutesRemaining = Math.max(1, Math.floor(activeSecondsRemaining / 60));
   const displayTasks = [
-    { ...activeTask, displayMins: Math.max(1, activeMinutesRemaining) }, // Max 1 ensures the block doesn't completely disappear while active
+    { ...activeTask, displayMins: activeMinutesRemaining },
     ...queueTasks.map(t => ({ ...t, displayMins: t.estimatedMinutes }))
   ];
   const totalOriginalMinutes = displayTasks.reduce((acc, t) => acc + t.displayMins, 0);
@@ -48,6 +61,7 @@ const EveningTimeline = ({ activeTask, queueTasks }) => {
         <h3 className="font-bold text-white flex items-center gap-2">
           <span>⏱️</span> Live Nightly Split
         </h3>
+        {/* The label will now tick down beautifully no matter what you do */}
         <span className="text-sm font-mono font-bold text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.2)]">
           {displayTotalMins}m {displayTotalSecs}s of work left
         </span>

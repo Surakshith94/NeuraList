@@ -38,9 +38,12 @@ function App() {
   const [pendingNextTaskData, setPendingNextTaskData] = useState(null);
 
   const syncLayoutToStorage = (active, queue) => {
-    if (active) localStorage.setItem('activeTaskId', active._id);
-    else localStorage.removeItem('activeTaskId');
-    if (queue) localStorage.setItem('queueTaskIds', JSON.stringify(queue.map(t => t._id)));
+    // FIX: Save the ENTIRE task object so we don't lose the stretched/squeezed minutes
+    if (active) localStorage.setItem('activeTaskObj', JSON.stringify(active));
+    else localStorage.removeItem('activeTaskObj');
+    
+    if (queue) localStorage.setItem('queueTasksArr', JSON.stringify(queue));
+    else localStorage.removeItem('queueTasksArr');
   };
 
   const processAndQueueTasks = (mood, rawTasks) => {
@@ -117,16 +120,17 @@ function App() {
       try {
         const response = await axios.get('http://localhost:5000/api/tasks');
         setAllTasks(response.data);
+        
         if (localStorage.getItem('hasEveningStarted') === 'true') {
-          const savedActiveId = localStorage.getItem('activeTaskId');
-          const savedQueueIds = JSON.parse(localStorage.getItem('queueTaskIds') || '[]');
-          const hydratedActive = response.data.find(t => t._id === savedActiveId) || null;
-          const hydratedQueue = savedQueueIds.map(id => response.data.find(t => t._id === id)).filter(Boolean);
+          // FIX: Load the exact stretched/squeezed objects from memory
+          const savedActiveObj = JSON.parse(localStorage.getItem('activeTaskObj') || 'null');
+          const savedQueueArr = JSON.parse(localStorage.getItem('queueTasksArr') || 'null');
 
-          if (hydratedActive) {
-            setActiveTask(hydratedActive);
-            setQueueTasks(hydratedQueue);
+          if (savedActiveObj) {
+            setActiveTask(savedActiveObj);
+            setQueueTasks(savedQueueArr || []);
           } else {
+            // Fallback if memory is empty
             processAndQueueTasks(localStorage.getItem('currentMood'), response.data);
           }
         }
