@@ -3,7 +3,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import SortableTaskItem from './SortableTaskItem';
 
-const TaskQueue = ({ tasks, onReorder }) => {
+const TaskQueue = ({ tasks, onReorder, onDrop }) => {
   // Configure sensors to know when the user is dragging (mouse or touch)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), // Requires moving 5px before drag starts to prevent accidental clicks
@@ -35,7 +35,7 @@ const TaskQueue = ({ tasks, onReorder }) => {
         <SortableContext items={tasks.map(t => t._id)} strategy={verticalListSortingStrategy}>
           <div className="flex flex-col gap-3">
             {tasks.map((task) => (
-              <SortableTaskItem key={task._id} task={task} />
+              <SortableTaskItem key={task._id} task={task} onDrop={onDrop} />
             ))}
           </div>
         </SortableContext>

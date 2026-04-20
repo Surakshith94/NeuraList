@@ -36,6 +36,7 @@ function App() {
   const [isRelaxModalOpen, setIsRelaxModalOpen] = useState(false);
   const [isRechargeModalOpen, setIsRechargeModalOpen] = useState(false);
   const [pendingNextTaskData, setPendingNextTaskData] = useState(null);
+  const [pendingCompletionData, setPendingCompletionData] = useState(null); // Added this to store overtime state
 
   const syncLayoutToStorage = (active, queue) => {
     // FIX: Save the ENTIRE task object so we don't lose the stretched/squeezed minutes
@@ -47,8 +48,7 @@ function App() {
   };
 
   const processAndQueueTasks = (mood, rawTasks) => {
-    let processedTasks = rawTasks.filter(task => task.status !== 'completed');
-
+    let processedTasks = rawTasks.filter(task => task.status !== 'completed' && task.status !== 'skipped');
     processedTasks = processedTasks.map(task => {
       if (task.priority === 'High') {
         if (mood === 'Burned Out' && task.energyLevel !== 'Recharge') {
@@ -119,10 +119,37 @@ function App() {
     const fetchDatabaseTasks = async () => {
       try {
         const response = await axios.get('http://localhost:5000/api/tasks');
-        setAllTasks(response.data);
+        let fetchedTasks = response.data;
+
+        // ------------------------------------------------------------------
+        // NEW: THE DAILY AUTO-RESET ENGINE
+        // ------------------------------------------------------------------
+        const todayString = new Date().toDateString();
         
+        // Loop through all fetched tasks to find yesterday's completed tasks
+        fetchedTasks = await Promise.all(fetchedTasks.map(async (task) => {
+          if (task.status === 'completed' && task.completedAt) {
+            const completedDate = new Date(task.completedAt).toDateString();
+            
+            // If the date it was completed is NOT today, reset it!
+            if (completedDate !== todayString) {
+              const resetData = { status: 'Pending', completedAt: null, timeSpent: 0 };
+              
+              // Tell the MongoDB database to un-finish it
+              await axios.put(`http://localhost:5000/api/tasks/${task._id}`, resetData);
+              
+              // Return the cleanly reset task to the React state
+              return { ...task, ...resetData };
+            }
+          }
+          return task; // If it's not completed, or completed today, leave it alone
+        }));
+
+        setAllTasks(fetchedTasks);
+        // ------------------------------------------------------------------
+
         if (localStorage.getItem('hasEveningStarted') === 'true') {
-          // FIX: Load the exact stretched/squeezed objects from memory
+          // Load the exact stretched/squeezed objects from memory
           const savedActiveObj = JSON.parse(localStorage.getItem('activeTaskObj') || 'null');
           const savedQueueArr = JSON.parse(localStorage.getItem('queueTasksArr') || 'null');
 
@@ -131,7 +158,7 @@ function App() {
             setQueueTasks(savedQueueArr || []);
           } else {
             // Fallback if memory is empty
-            processAndQueueTasks(localStorage.getItem('currentMood'), response.data);
+            processAndQueueTasks(localStorage.getItem('currentMood'), fetchedTasks);
           }
         }
         setIsLoading(false);
@@ -182,15 +209,15 @@ function App() {
   // ------------------------------------------------------------------
   // THE NEW GLOBAL INTERCEPTOR ENGINE
   // ------------------------------------------------------------------
-  const finalizeTaskCompletion = async (taskId,timeSpent, customQueue= null) => {
+  const finalizeTaskCompletion = async (taskId, timeSpent, customQueue= null) => {
     const undertime = activeTask.estimatedMinutes - timeSpent;
     let updatedQueue = customQueue !== null ? [...customQueue] : [...queueTasks];
     if (undertime > 0) updatedQueue = applyTimeBonus(updatedQueue, undertime);
 
     try {
       if (!activeTask.isSystemGenerated) {
-        await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { status: 'completed', completedAt: new Date() });
-        setAllTasks(allTasks.map(t => t._id === taskId ? { ...t, status: 'completed', completedAt: new Date() } : t));
+        await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { status: 'completed', completedAt: new Date(), timeSpent: timeSpent });
+        setAllTasks(allTasks.map(t => t._id === taskId ? { ...t, status: 'completed', completedAt: new Date(), timeSpent: timeSpent } : t));
       }
 
       if (updatedQueue.length > 0) {
@@ -260,28 +287,66 @@ function App() {
     finalizeTaskCompletion(taskId, timeSpent);
   };
 
-  const handleDropSelectedTask = async (taskIdToDrop) => {
-    setIsOvertimeModalOpen(false);
+  const handleDropTask = async (taskId) => {
     try {
-      // 1. Permanently delete the sacrificed task from the Database
-      await axios.delete(`http://localhost:5000/api/tasks/${taskIdToDrop}`);
+      // 1. Mark as skipped in the DB with 0 time spent
+      await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { 
+        status: 'skipped', 
+        completedAt: new Date(),
+        timeSpent: 0 
+      });
 
-      // 2. Remove it from React State locally
+      // 2. Update local state
+      const updatedTasks = allTasks.map(t => 
+        t._id === taskId ? { ...t, status: 'skipped', completedAt: new Date(), timeSpent: 0 } : t
+      );
+      setAllTasks(updatedTasks);
+
+      // 3. Remove from Active or Queue
+      if (activeTask && activeTask._id === taskId) {
+        if (queueTasks.length > 0) {
+          setActiveTask(queueTasks[0]);
+          setQueueTasks(queueTasks.slice(1));
+          syncLayoutToStorage(queueTasks[0], queueTasks.slice(1)); 
+        } else {
+          setActiveTask(null);
+          setQueueTasks([]);
+          syncLayoutToStorage(null, []);
+        }
+      } else {
+        const newQueue = queueTasks.filter(t => t._id !== taskId);
+        setQueueTasks(newQueue);
+        syncLayoutToStorage(activeTask, newQueue);
+      }
+    } catch (error) {
+      console.error("Error dropping task:", error);
+    }
+  };
+
+  // --- THE NEW OVERTIME DROP HANDLER ---
+  const handleDropSelectedTask = async (taskIdToDrop) => {
+    try {
+      // 1. Permanently delete the sacrificed task from the database
+      await axios.delete(`http://localhost:5000/api/tasks/${taskIdToDrop}`);
+      
+      // 2. Remove it locally from state
       setAllTasks(prev => prev.filter(t => t._id !== taskIdToDrop));
       const newQueue = queueTasks.filter(t => t._id !== taskIdToDrop);
       setQueueTasks(newQueue);
+      syncLayoutToStorage(activeTask, newQueue);
 
-      // 3. Mark the overtime task as complete, and pass the NEW queue to it!
-      finalizeTaskCompletion(activeTask._id, activeTask.timeSpent, newQueue);
-    } catch (err) {
-      console.error("Error dropping task:", err);
+      // 3. Close modal and officially mark the original task as completed!
+      setIsOvertimeModalOpen(false);
+      finalizeTaskCompletion(pendingCompletionData.taskId, pendingCompletionData.timeSpent);
+    } catch (error) {
+      console.error("Error dropping task:", error);
     }
   };
 
   const handlePushBedtime = () => {
     setIsOvertimeModalOpen(false);
     // You decided to just stay up later! Complete the task normally without dropping anything.
-    finalizeTaskCompletion(activeTask._id, activeTask.timeSpent);
+    finalizeTaskCompletion(pendingCompletionData.taskId, pendingCompletionData.timeSpent);
   };
 
   // --- Modal Button Handlers ---
@@ -479,24 +544,26 @@ function App() {
             <EveningTimeline activeTask={activeTask} queueTasks={queueTasks} />
 
             {activeTask ? (
-              <ActiveTaskCard  key={activeTask._id} task={activeTask} onComplete={handleComplete} />
+              <ActiveTaskCard key={activeTask._id} task={activeTask} onComplete={handleComplete} onDrop={handleDropTask} />
             ) : (
               <div className="p-8 text-center border border-dashed border-white/20 rounded-2xl bg-white/5 mb-6">
                 <p className="text-gray-400">No active tasks match your current mood. You are free!</p>
               </div>
             )}
 
-            <TaskQueue tasks={queueTasks} onReorder={handleReorderQueue} />
-            {/* NEW: Completed Tasks show up immediately at the bottom of the active page! */}
-            {allTasks.filter(t => t.status === 'completed').length > 0 && (
+            <TaskQueue tasks={queueTasks} onReorder={handleReorderQueue} onDrop={handleDropTask} />
+
+            {allTasks.filter(t => t.status === 'completed' || t.status === 'skipped').length > 0 && (
               <div className="mt-12 border-t border-white/10 pt-8">
                 <h3 className="text-xl font-bold mb-4 text-white flex items-center gap-2 opacity-50">
                   <span>✅</span> Completed Tonight
                 </h3>
                 <div className="flex flex-col gap-3 opacity-60 hover:opacity-100 transition-opacity">
-                  {allTasks.filter(t => t.status === 'completed').map((task) => (
+                  {allTasks.filter(t => t.status === 'completed' || t.status === 'skipped').map((task) => (
                     <div key={task._id} className="flex items-center justify-between p-4 rounded-2xl bg-green-500/5 border border-green-500/10">
-                      <h4 className="font-semibold text-gray-400 line-through">{task.title}</h4>
+                      <h4 className="font-semibold text-gray-400 line-through">
+                        {task.title} {task.status === 'skipped' && <span className="text-red-400/80 text-xs ml-2">(Skipped)</span>}
+                      </h4>
                       <button 
                         onClick={() => handleRestoreTask(task._id)} 
                         className="text-gray-500 hover:text-green-400 hover:bg-green-500/10 px-3 py-2 rounded-lg transition-colors cursor-pointer text-sm font-bold"
@@ -508,7 +575,6 @@ function App() {
                 </div>
               </div>
             )}
-            {/* END OF NEW SECTION */}
           </>
         )}
 
@@ -523,7 +589,7 @@ function App() {
        <OvertimeModal 
           isOpen={isOvertimeModalOpen} 
           taskTitle={activeTask?.title} 
-          overtimeMinutes={activeTask ? activeTask.timeSpent - activeTask.estimatedMinutes : 0} 
+          overtimeMinutes={activeTask && pendingCompletionData ? pendingCompletionData.timeSpent - activeTask.estimatedMinutes : 0} 
           queueTasks={queueTasks}  
           onDropTask={handleDropSelectedTask} 
           onPushBedtime={handlePushBedtime}  

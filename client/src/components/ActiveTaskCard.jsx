@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const ActiveTaskCard = ({ task, onComplete }) => {
+const ActiveTaskCard = ({ task, onComplete, onDrop }) => {
   const [secondsElapsed, setSecondsElapsed] = useState(() => {
     const savedSeconds = localStorage.getItem(`timer_${task._id}`);
     return savedSeconds ? parseInt(savedSeconds, 10) : (task.timeSpent || 0) * 60;
@@ -170,6 +170,14 @@ const ActiveTaskCard = ({ task, onComplete }) => {
             }`}
           >
             {isRunning ? '⏸ Pause' : (!hasStarted ? '▶️ Start Task' : '▶️ Resume')}
+          </button>
+          {/* NEW SKIP BUTTON */}
+          <button 
+            onClick={() => onDrop(task._id)} 
+            className="px-5 py-4 rounded-2xl font-bold text-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer"
+            title="Drop Task for Tonight"
+          >
+            ⏭️ Skip
           </button>
         </div>
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-const SortableTaskItem = ({ task }) => {
+const SortableTaskItem = ({ task, onDrop }) => { // 1. Added onDrop here
   const {
     attributes,
     listeners,
@@ -12,7 +12,6 @@ const SortableTaskItem = ({ task }) => {
     isDragging,
   } = useSortable({ id: task._id });
 
-  // This applies the visual CSS transform when you drag the item
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -41,9 +40,24 @@ const SortableTaskItem = ({ task }) => {
           </p>
         </div>
       </div>
-      <span className="text-xs font-bold text-gray-400 bg-black/20 px-3 py-1 rounded-full">
-        {task.priority}
-      </span>
+      
+      {/* 2. Grouped the badge and the new button together */}
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-bold text-gray-400 bg-black/20 px-3 py-1 rounded-full">
+          {task.priority}
+        </span>
+        
+        {/* 3. The Skip Button with the dnd-kit click shield */}
+        <button 
+          onPointerDown={(e) => e.stopPropagation()} // MUST HAVE: Stops dnd-kit from eating the click!
+          onClick={() => onDrop(task._id)}
+          className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+          title="Drop Task for Tonight"
+        >
+          ⏭️
+        </button>
+      </div>
+
     </div>
   );
 };
