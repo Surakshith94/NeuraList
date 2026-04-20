@@ -5,8 +5,11 @@ const ActiveTaskCard = ({ task, onComplete, onDrop }) => {
   const [hasStarted, setHasStarted] = useState(false);
   const [secondsElapsed, setSecondsElapsed] = useState(0);
 
-  // 1. Point this exactly to the file in your public folder!
   const alarmRef = useRef(typeof window !== 'undefined' ? new Audio('/alarm.mp3') : null);
+  
+  // NEW: OS Clock References to defeat browser throttling
+  const lastTickRef = useRef(null); 
+  const lastRungMinuteRef = useRef(-1); 
 
   // Load existing time if paused/refreshed
   useEffect(() => {
@@ -19,37 +22,54 @@ const ActiveTaskCard = ({ task, onComplete, onDrop }) => {
       setHasStarted(false);
     }
     setIsRunning(false);
+    lastRungMinuteRef.current = -1; // Reset the alarm history
   }, [task._id]);
 
-  // The Ticking Clock
+  // 1. THE ANTI-THROTTLING CLOCK
   useEffect(() => {
     let interval;
     if (isRunning) {
+      lastTickRef.current = Date.now(); // Record exact timestamp when you hit play
+      
       interval = setInterval(() => {
-        setSecondsElapsed((prev) => {
-          const newTime = prev + 1;
-          localStorage.setItem(`timer_${task._id}`, newTime);
-          return newTime;
-        });
+        const now = Date.now();
+        // Calculate the exact real-world seconds passed since the last tick
+        const deltaSeconds = Math.floor((now - lastTickRef.current) / 1000);
+
+        if (deltaSeconds > 0) {
+          setSecondsElapsed((prev) => {
+            const newTime = prev + deltaSeconds;
+            localStorage.setItem(`timer_${task._id}`, newTime);
+            return newTime;
+          });
+          // Move the reference forward by the exact seconds we just added
+          lastTickRef.current = lastTickRef.current + (deltaSeconds * 1000); 
+        }
       }, 1000);
     }
     return () => clearInterval(interval);
   }, [isRunning, task._id]);
 
-  // 2. THE BULLETPROOF ALARM
+  // 2. THE JUMP-PROOF ALARM
   useEffect(() => {
     const targetSeconds = task.estimatedMinutes * 60;
     
-    // If the timer is running and we are at or past the target time...
     if (isRunning && secondsElapsed >= targetSeconds) {
-      // Ring EXACTLY on the minute mark (e.g., 15:00, 16:00, 17:00)
-      if ((secondsElapsed - targetSeconds) % 60 === 0) {
+      // Calculate how many minutes into overtime we are
+      const overTimeMins = Math.floor((secondsElapsed - targetSeconds) / 60);
+      
+      // If we entered a new overtime minute (even if the browser jumped past the exact 00s mark!)
+      if (overTimeMins > lastRungMinuteRef.current) {
         if (alarmRef.current) {
-          alarmRef.current.currentTime = 0; // Rewind to start
-          // The .catch prevents the app from crashing if Chrome blocks the audio
-          alarmRef.current.play().catch(err => console.error("Browser blocked the alarm sound:", err));
+          alarmRef.current.currentTime = 0; 
+          alarmRef.current.play().catch(err => console.error("Browser blocked alarm:", err));
         }
+        // Remember that we rang for this minute, don't ring again until the next minute
+        lastRungMinuteRef.current = overTimeMins; 
       }
+    } else {
+      // If we reset or haven't reached the target, reset the alarm state
+      lastRungMinuteRef.current = -1;
     }
   }, [secondsElapsed, isRunning, task.estimatedMinutes]);
 
@@ -67,6 +87,7 @@ const ActiveTaskCard = ({ task, onComplete, onDrop }) => {
   const handleReset = () => {
     setIsRunning(false);
     setSecondsElapsed(0);
+    lastRungMinuteRef.current = -1;
     localStorage.removeItem(`timer_${task._id}`);
   };
 
@@ -111,7 +132,6 @@ const ActiveTaskCard = ({ task, onComplete, onDrop }) => {
           </span>
         </div>
 
-        {/* Removed the Music button, kept the Reset button */}
         <div className="flex gap-3">
           <button 
             onClick={handleReset}
