@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import alarmSound from '../../public/alarm.mp3'; // Ensure you have an alarm sound in this path
 
 const ActiveTaskCard = ({ task, onComplete, onDrop }) => {
   const [isRunning, setIsRunning] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [secondsElapsed, setSecondsElapsed] = useState(0);
 
-  const alarmRef = useRef(typeof window !== 'undefined' ? new Audio('/alarm.mp3') : null);
-  
+  const alarmRef = useRef(typeof window !== 'undefined' ? new Audio(alarmSound) : null);
   // NEW: OS Clock References to defeat browser throttling
   const lastTickRef = useRef(null); 
   const lastRungMinuteRef = useRef(-1); 
