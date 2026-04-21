@@ -1,29 +1,38 @@
 import React from 'react';
 
 const ConsistencyHeatmap = ({ tasks }) => {
+  // Safe timezone date formatter (Ignores UTC shift)
+  const getLocalDateString = (dateObj) => {
+    const d = new Date(dateObj);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // 1. Filter ONLY completed tasks
   const completedTasks = tasks.filter(task => task.status === 'completed' && task.completedAt);
 
-  // 2. Generate an array of the last 28 days (4 weeks)
+  // 2. Generate an array of the last 28 days (4 weeks) safely in local time
   const last28Days = Array.from({ length: 28 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (27 - i));
-    return d.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    return getLocalDateString(d); 
   });
 
   // 3. Count how many tasks were completed on each of those days
   const activityMap = completedTasks.reduce((acc, task) => {
-    const dateStr = new Date(task.completedAt).toISOString().split('T')[0];
+    const dateStr = getLocalDateString(task.completedAt);
     acc[dateStr] = (acc[dateStr] || 0) + 1;
     return acc;
   }, {});
 
   // 4. Determine the color intensity based on task count
   const getColor = (count) => {
-    if (count === 0) return 'bg-white/5 border-white/5'; // Empty day
+    if (count === 0) return 'bg-white/5 border-white/5'; 
     if (count === 1) return 'bg-green-900/50 border-green-800/50';
     if (count === 2) return 'bg-green-700/70 border-green-600/50';
-    return 'bg-green-500 border-green-400 shadow-[0_0_10px_rgba(34,197,94,0.4)]'; // 3+ tasks (Hot streak!)
+    return 'bg-green-500 border-green-400 shadow-[0_0_10px_rgba(34,197,94,0.4)]'; 
   };
 
   return (
@@ -37,7 +46,7 @@ const ConsistencyHeatmap = ({ tasks }) => {
       
       {/* The Heatmap Grid */}
       <div className="grid grid-cols-7 gap-2">
-        {last28Days.map((dateStr, index) => {
+        {last28Days.map((dateStr) => {
           const count = activityMap[dateStr] || 0;
           return (
             <div 
