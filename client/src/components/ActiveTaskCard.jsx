@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import alarmSound from '../../public/alarm.mp3'; // Ensure you have an alarm sound in this path
+import alarmSound from '/alarm.mp3'; // Ensure you have an alarm sound in this path
 
 const ActiveTaskCard = ({ task, onComplete, onDrop }) => {
   const [isRunning, setIsRunning] = useState(false);
