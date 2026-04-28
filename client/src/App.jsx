@@ -278,6 +278,26 @@ function App() {
     finalizeTaskCompletion(taskId, timeSpent);
   };
 
+  // --- NEW: SWAP TASK LOGIC ---
+  const handleSwapToActive = (taskIdToPromote) => {
+    // 1. Find the task in the queue we want to promote
+    const taskToPromote = queueTasks.find(t => t._id === taskIdToPromote);
+    if (!taskToPromote) return;
+
+    // 2. Remove it from the queue
+    const newQueue = queueTasks.filter(t => t._id !== taskIdToPromote);
+
+    // 3. Put the current Active Task at the top of the queue
+    if (activeTask) {
+      newQueue.unshift(activeTask);
+    }
+
+    // 4. Update the state and memory
+    setActiveTask(taskToPromote);
+    setQueueTasks(newQueue);
+    syncLayoutToStorage(taskToPromote, newQueue);
+  };
+
   const handleDropTask = async (taskId) => {
     try {
       await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { 
@@ -520,8 +540,13 @@ function App() {
               </div>
             )}
 
-            <TaskQueue tasks={queueTasks} onReorder={handleReorderQueue} onDrop={handleDropTask} />
-
+{/* Added onSwap prop here */}
+            <TaskQueue 
+              tasks={queueTasks} 
+              onReorder={handleReorderQueue} 
+              onDrop={handleDropTask} 
+              onSwap={handleSwapToActive} 
+            />
             {allTasks.filter(t => t.status === 'completed' || t.status === 'skipped').length > 0 && (
               <div className="mt-12 border-t border-white/10 pt-8">
                 <h3 className="text-xl font-bold mb-4 text-white flex items-center gap-2 opacity-50">

@@ -2,7 +2,8 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-const SortableTaskItem = ({ task, onDrop }) => { // 1. Added onDrop here
+// 1. Added onSwap here
+const SortableTaskItem = ({ task, onDrop, onSwap }) => { 
   const {
     attributes,
     listeners,
@@ -41,15 +42,23 @@ const SortableTaskItem = ({ task, onDrop }) => { // 1. Added onDrop here
         </div>
       </div>
       
-      {/* 2. Grouped the badge and the new button together */}
       <div className="flex items-center gap-3">
         <span className="text-xs font-bold text-gray-400 bg-black/20 px-3 py-1 rounded-full">
           {task.priority}
         </span>
         
-        {/* 3. The Skip Button with the dnd-kit click shield */}
+        {/* NEW: Swap to Active Button */}
         <button 
-          onPointerDown={(e) => e.stopPropagation()} // MUST HAVE: Stops dnd-kit from eating the click!
+          onPointerDown={(e) => e.stopPropagation()} 
+          onClick={() => onSwap(task._id)}
+          className="p-2 text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors cursor-pointer"
+          title="Swap to Active Task"
+        >
+          ⬆️
+        </button>
+
+        <button 
+          onPointerDown={(e) => e.stopPropagation()} 
           onClick={() => onDrop(task._id)}
           className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
           title="Drop Task for Tonight"
@@ -57,7 +66,6 @@ const SortableTaskItem = ({ task, onDrop }) => { // 1. Added onDrop here
           ⏭️
         </button>
       </div>
-
     </div>
   );
 };
