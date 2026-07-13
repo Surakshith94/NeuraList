@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import ActiveTaskCard from './components/ActiveTaskCard';
-import OvertimeModal from './components/overtimeModal';
+import OvertimeModal from './components/OvertimeModal';
 import TaskQueue from './components/TaskQueue'; 
 import AddTaskModal from './components/AddTaskModal'; 
 import EditTaskModal from './components/EditTaskModal'; 
