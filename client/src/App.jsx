@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import ActiveTaskCard from './components/ActiveTaskCard';
-import OvertimeModal from './components/OvertimeModal';
+import OvertimeModal from './components/overtimeModal';
 import TaskQueue from './components/TaskQueue'; 
 import AddTaskModal from './components/AddTaskModal'; 
 import EditTaskModal from './components/EditTaskModal'; 
@@ -37,7 +37,6 @@ function App() {
   const [pendingNextTaskData, setPendingNextTaskData] = useState(null);
   const [pendingCompletionData, setPendingCompletionData] = useState(null);
   
-  // Add this right under your other states!
   const [bedtime, setBedtime] = useState(() => localStorage.getItem('bedtime') || '23:00');
 
   const syncLayoutToStorage = (active, queue) => {
@@ -53,13 +52,11 @@ function App() {
     const [hours, minutes] = timeStr.split(':').map(Number);
     const bDate = new Date();
     bDate.setHours(hours, minutes, 0, 0);
-    // If the time has already passed today, push it to tomorrow
     if (new Date() > bDate) bDate.setDate(bDate.getDate() + 1);
     return bDate;
   };
 
   const processAndQueueTasks = (mood, rawTasks, customBedtime = null) => {
-
     let processedTasks = rawTasks.filter(task => task.status !== 'completed' && task.status !== 'skipped');
     processedTasks = processedTasks.map(task => {
       if (task.priority === 'High') {
@@ -71,18 +68,13 @@ function App() {
       }
       return task;
     });
+
     const activeBedtime = customBedtime || bedtime;
     const targetSleepTime = getBedtimeDate(activeBedtime);
     const now = new Date();
-    const bedtime = new Date();
-
     
-    bedtime.setHours(23, 0, 0, 0); 
-    if (now > bedtime) bedtime.setDate(bedtime.getDate() + 1);
     let minutesUntilSleep = Math.floor((targetSleepTime - now) / 60000);
     if (minutesUntilSleep <= 0) minutesUntilSleep = 60;
-
-    const activeSecondsSpent = parseInt(localStorage.getItem(`timer_${activeTask._id}`) || 0, 10);
 
     const highTasks = processedTasks.filter(t => t.priority === 'High');
     const medTasks = processedTasks.filter(t => t.priority === 'Medium');
@@ -135,19 +127,16 @@ function App() {
   useEffect(() => {
     const fetchDatabaseTasks = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/tasks');
+        const response = await axios.get('https://neuralist.onrender.com/api/tasks');
         let fetchedTasks = response.data;
-
         const todayString = new Date().toDateString();
         
         fetchedTasks = await Promise.all(fetchedTasks.map(async (task) => {
-          // FIX 1: We now check for BOTH 'completed' and 'skipped' to reset them!
           if ((task.status === 'completed' || task.status === 'skipped') && task.completedAt) {
             const completedDate = new Date(task.completedAt).toDateString();
-            
             if (completedDate !== todayString) {
               const resetData = { status: 'Pending', completedAt: null, timeSpent: 0 };
-              await axios.put(`http://localhost:5000/api/tasks/${task._id}`, resetData);
+              await axios.put(`https://neuralist.onrender.com/api/tasks/${task._id}`, resetData);
               return { ...task, ...resetData };
             }
           }
@@ -219,12 +208,11 @@ function App() {
 
     try {
       if (!activeTask.isSystemGenerated) {
-        // FIX 2: Save today's date permanently to the Heatmap history array
         const d = new Date();
         const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const newHistory = [...new Set([...(activeTask.completedDates || []), todayStr])];
 
-        await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { 
+        await axios.put(`https://neuralist.onrender.com/api/tasks/${taskId}`, { 
           status: 'completed', 
           completedAt: new Date(), 
           timeSpent: timeSpent,
@@ -276,11 +264,8 @@ function App() {
 
     if (overtime > 0) {
       const now = new Date();
-      const bedtime = new Date();
-      bedtime.setHours(23, 0, 0, 0); 
-      if (now > bedtime) bedtime.setDate(bedtime.getDate() + 1);
-      
-      const minutesUntilSleep = Math.floor((bedtime - now) / 60000);
+      const targetSleepTime = getBedtimeDate(bedtime);
+      const minutesUntilSleep = Math.floor((targetSleepTime - now) / 60000);
       const queueTotalTime = queueTasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
 
       if (minutesUntilSleep >= queueTotalTime) {
@@ -297,21 +282,16 @@ function App() {
     finalizeTaskCompletion(taskId, timeSpent);
   };
 
-  // --- NEW: SWAP TASK LOGIC ---
   const handleSwapToActive = (taskIdToPromote) => {
-    // 1. Find the task in the queue we want to promote
     const taskToPromote = queueTasks.find(t => t._id === taskIdToPromote);
     if (!taskToPromote) return;
 
-    // 2. Remove it from the queue
     const newQueue = queueTasks.filter(t => t._id !== taskIdToPromote);
 
-    // 3. Put the current Active Task at the top of the queue
     if (activeTask) {
       newQueue.unshift(activeTask);
     }
 
-    // 4. Update the state and memory
     setActiveTask(taskToPromote);
     setQueueTasks(newQueue);
     syncLayoutToStorage(taskToPromote, newQueue);
@@ -319,7 +299,7 @@ function App() {
 
   const handleDropTask = async (taskId) => {
     try {
-      await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { 
+      await axios.put(`https://neuralist.onrender.com/api/tasks/${taskId}`, { 
         status: 'skipped', 
         completedAt: new Date(),
         timeSpent: 0 
@@ -350,7 +330,7 @@ function App() {
 
   const handleDropSelectedTask = async (taskIdToDrop) => {
     try {
-      await axios.delete(`http://localhost:5000/api/tasks/${taskIdToDrop}`);
+      await axios.delete(`https://neuralist.onrender.com/api/tasks/${taskIdToDrop}`);
       setAllTasks(prev => prev.filter(t => t._id !== taskIdToDrop));
       const newQueue = queueTasks.filter(t => t._id !== taskIdToDrop);
       setQueueTasks(newQueue);
@@ -419,7 +399,6 @@ function App() {
       const taskToRestore = allTasks.find(t => t._id === taskId);
       let preservedTime = 0;
       
-      // FIX 3: Remove today's date from history if we Undo the completion!
       const d = new Date();
       const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       const updatedHistory = (taskToRestore.completedDates || []).filter(date => date !== todayStr);
@@ -432,7 +411,7 @@ function App() {
         }
       }
 
-      await axios.put(`http://localhost:5000/api/tasks/${taskId}`, { 
+      await axios.put(`https://neuralist.onrender.com/api/tasks/${taskId}`, { 
         status: 'Pending', 
         completedAt: null,
         completedDates: updatedHistory 
@@ -455,7 +434,7 @@ function App() {
 
   const handleDeleteTask = async (taskId) => {
     try {
-      await axios.delete(`http://localhost:5000/api/tasks/${taskId}`);
+      await axios.delete(`https://neuralist.onrender.com/api/tasks/${taskId}`);
       setAllTasks(allTasks.filter(task => task._id !== taskId));
     } catch (error) { console.error(error); }
   };
@@ -467,11 +446,11 @@ function App() {
 
   const handleSyncSchedule = () => {
     if (!hasEveningStarted || queueTasks.length === 0 || !activeTask) return;
+    
     const now = new Date();
-    const bedtime = new Date();
-    bedtime.setHours(23, 0, 0, 0); 
-    if (now > bedtime) bedtime.setDate(bedtime.getDate() + 1);
-    const minutesUntilSleep = Math.floor((bedtime - now) / 60000);
+    const targetSleepTime = getBedtimeDate(bedtime);
+    const minutesUntilSleep = Math.floor((targetSleepTime - now) / 60000);
+    
     const activeSecondsSpent = parseInt(localStorage.getItem(`timer_${activeTask._id}`) || 0, 10);
     const activeMinutesRemaining = Math.max(0, activeTask.estimatedMinutes - Math.floor(activeSecondsSpent / 60));
     
@@ -536,7 +515,6 @@ function App() {
                     const newTime = e.target.value;
                     setBedtime(newTime);
                     localStorage.setItem('bedtime', newTime);
-                    // If the evening is running, dynamically squeeze/expand tasks to fit the new time!
                     if (hasEveningStarted) processAndQueueTasks(currentMood, allTasks, newTime);
                   }}
                   className="bg-black/50 border border-white/10 rounded px-2 py-1 text-white cursor-pointer hover:border-blue-500 transition-colors"
@@ -576,7 +554,6 @@ function App() {
               </div>
             )}
 
-{/* Added onSwap prop here */}
             <TaskQueue 
               tasks={queueTasks} 
               onReorder={handleReorderQueue} 

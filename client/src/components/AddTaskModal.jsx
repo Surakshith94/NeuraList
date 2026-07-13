@@ -25,7 +25,7 @@ const AddTaskModal = ({ isOpen, onClose, onTaskAdded }) => {
     };
 
     try {
-      const response = await axios.post('http://localhost:5000/api/tasks', newTask);
+      const response = await axios.post('https://neuralist.onrender.com/api/tasks', newTask);
       onTaskAdded(response.data); 
       
       // Clear form

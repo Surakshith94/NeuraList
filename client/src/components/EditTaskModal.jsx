@@ -34,7 +34,7 @@ const EditTaskModal = ({ isOpen, onClose, taskToEdit, onTaskUpdated }) => {
 
     try {
       // Send the updated data to the backend
-      const response = await axios.put(`http://localhost:5000/api/tasks/${taskToEdit._id}`, updatedData);
+      const response = await axios.put(`https://neuralist.onrender.com/api/tasks/${taskToEdit._id}`, updatedData);
       
       // Send the new saved task back to App.jsx
       onTaskUpdated(response.data); 
