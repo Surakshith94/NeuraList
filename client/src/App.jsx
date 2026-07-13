@@ -23,6 +23,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   
   const [hasEveningStarted, setHasEveningStarted] = useState(() => localStorage.getItem('hasEveningStarted') === 'true');
+  
   const [currentMood, setCurrentMood] = useState(() => localStorage.getItem('currentMood') || null);
   
   const [isMoodModalOpen, setIsMoodModalOpen] = useState(false);
