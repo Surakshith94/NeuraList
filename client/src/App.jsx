@@ -35,7 +35,10 @@ function App() {
   const [isRelaxModalOpen, setIsRelaxModalOpen] = useState(false);
   const [isRechargeModalOpen, setIsRechargeModalOpen] = useState(false);
   const [pendingNextTaskData, setPendingNextTaskData] = useState(null);
-  const [pendingCompletionData, setPendingCompletionData] = useState(null); 
+  const [pendingCompletionData, setPendingCompletionData] = useState(null);
+  
+  // Add this right under your other states!
+  const [bedtime, setBedtime] = useState(() => localStorage.getItem('bedtime') || '23:00');
 
   const syncLayoutToStorage = (active, queue) => {
     if (active) localStorage.setItem('activeTaskObj', JSON.stringify(active));
@@ -45,7 +48,18 @@ function App() {
     else localStorage.removeItem('queueTasksArr');
   };
 
-  const processAndQueueTasks = (mood, rawTasks) => {
+  const getBedtimeDate = (timeStr) => {
+    if (!timeStr) timeStr = '23:00';
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const bDate = new Date();
+    bDate.setHours(hours, minutes, 0, 0);
+    // If the time has already passed today, push it to tomorrow
+    if (new Date() > bDate) bDate.setDate(bDate.getDate() + 1);
+    return bDate;
+  };
+
+  const processAndQueueTasks = (mood, rawTasks, customBedtime = null) => {
+
     let processedTasks = rawTasks.filter(task => task.status !== 'completed' && task.status !== 'skipped');
     processedTasks = processedTasks.map(task => {
       if (task.priority === 'High') {
@@ -57,13 +71,18 @@ function App() {
       }
       return task;
     });
-
+    const activeBedtime = customBedtime || bedtime;
+    const targetSleepTime = getBedtimeDate(activeBedtime);
     const now = new Date();
     const bedtime = new Date();
+
+    
     bedtime.setHours(23, 0, 0, 0); 
     if (now > bedtime) bedtime.setDate(bedtime.getDate() + 1);
-    let minutesUntilSleep = Math.floor((bedtime - now) / 60000);
+    let minutesUntilSleep = Math.floor((targetSleepTime - now) / 60000);
     if (minutesUntilSleep <= 0) minutesUntilSleep = 60;
+
+    const activeSecondsSpent = parseInt(localStorage.getItem(`timer_${activeTask._id}`) || 0, 10);
 
     const highTasks = processedTasks.filter(t => t.priority === 'High');
     const medTasks = processedTasks.filter(t => t.priority === 'Medium');
@@ -506,7 +525,24 @@ function App() {
         <header className="mb-10 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
           <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-500 tracking-tight">Good Evening.</h1>
           <div className="flex items-center gap-4">
-            <SleepCountdown targetBedtime="23:00" />
+            <div className="flex flex-col items-end gap-1">
+              <SleepCountdown targetBedtime={bedtime} />
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span>Target Sleep:</span>
+                <input 
+                  type="time" 
+                  value={bedtime} 
+                  onChange={(e) => {
+                    const newTime = e.target.value;
+                    setBedtime(newTime);
+                    localStorage.setItem('bedtime', newTime);
+                    // If the evening is running, dynamically squeeze/expand tasks to fit the new time!
+                    if (hasEveningStarted) processAndQueueTasks(currentMood, allTasks, newTime);
+                  }}
+                  className="bg-black/50 border border-white/10 rounded px-2 py-1 text-white cursor-pointer hover:border-blue-500 transition-colors"
+                />
+              </div>
+            </div>
             <button onClick={() => setIsAddModalOpen(true)} className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl font-bold transition-colors cursor-pointer border border-white/10" title="Add New Task">+</button>
           </div>
         </header>
