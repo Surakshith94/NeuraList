@@ -38,7 +38,7 @@ const AddTaskModal = ({ isOpen, onClose, onTaskAdded }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px] bg-[#121218] border-white/10 text-white rounded-[24px]">
+      <DialogContent className="sm:max-w-[425px] bg-[#121218] border-white/10 text-white rounded-[24px] z-[100] relative">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">Add New Task</DialogTitle>
           <DialogDescription className="text-gray-400 mt-1">What do you need to get done today?</DialogDescription>
